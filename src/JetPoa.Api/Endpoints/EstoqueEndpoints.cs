@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using JetPoa.Api.Auth;
 using Dapper;
 using JetPoa.Api.Data;
 using JetPoa.Api.Domain;
@@ -35,13 +37,15 @@ public static class EstoqueEndpoints
         public string? Usuario { get; set; }
     }
 
-    public sealed record MovimentoInput(long ProdutoId, string Tipo, decimal Quantidade, decimal? CustoUnitario, string? Observacao, long UsuarioId, string Pin);
+    public sealed record MovimentoInput(long ProdutoId, string Tipo, decimal Quantidade, decimal? CustoUnitario, string? Observacao);
     public sealed record ContagemItem(long ProdutoId, decimal Contado);
-    public sealed record InventarioInput(List<ContagemItem> Itens, string? Observacao, long UsuarioId, string Pin);
+    public sealed record InventarioInput(List<ContagemItem> Itens, string? Observacao);
 
     public static void MapEstoque(this IEndpointRouteBuilder app)
     {
-        var g = app.MapGroup("/api/estoque").WithTags("Estoque");
+        var g = app.MapGroup("/api/estoque").WithTags("Estoque").RequireAuthorization(Permissoes.EstoqueVer);
+        var gMov = g.MapGroup("").RequireAuthorization(Permissoes.EstoqueMovimentar);
+        var gAjuste = g.MapGroup("").RequireAuthorization(Permissoes.EstoqueAjustar);
 
         g.MapGet("", async (Db db, bool? abaixoMinimo, CancellationToken ct) =>
         {
@@ -78,7 +82,7 @@ public static class EstoqueEndpoints
         });
 
         // Entrada de compra (E), perda/quebra (P) ou ajuste manual (A)
-        g.MapPost("/movimento", async (Db db, MovimentoInput i, CancellationToken ct) =>
+        gMov.MapPost("/movimento", async (ClaimsPrincipal user, Db db, MovimentoInput i, CancellationToken ct) =>
         {
             var tipo = (i.Tipo ?? "").ToUpperInvariant();
             if (tipo is not ("E" or "P" or "A")) return Erro("Tipo deve ser E (entrada), P (perda) ou A (ajuste).");
@@ -89,28 +93,24 @@ public static class EstoqueEndpoints
 
             using var c = await db.OpenAsync(ct);
             using var tx = c.BeginTransaction();
-            var u = await UsuarioEndpoints.AutenticarAsync(c, i.UsuarioId, i.Pin, tx);
-            if (u is null || u.Perfil == "Garçom") return Erro("PIN incorreto ou usuário sem permissão de estoque.");
-            if (tipo == "A" && u.AutorizaDesconto != "S") return Erro("Ajuste manual exige gerente.");
+            if (tipo == "A" && !user.Pode(Permissoes.EstoqueAjustar)) return Results.Forbid();
             var controla = await c.ExecuteScalarAsync<string?>("select controla_estoque from produto where id = :id", new { id = i.ProdutoId }, tx);
             if (controla != "S") return Erro("Produto não controla estoque (kits baixam os componentes).");
 
             var qtd = tipo == "P" ? -i.Quantidade : i.Quantidade;
             var saldo = await Estoque.MovimentarAsync(c, i.ProdutoId, tipo, qtd, tipo == "E" ? i.CustoUnitario : null, null,
-                string.IsNullOrWhiteSpace(i.Observacao) ? null : i.Observacao.Trim(), u.Id, tx);
+                string.IsNullOrWhiteSpace(i.Observacao) ? null : i.Observacao.Trim(), user.Id(), tx);
             tx.Commit();
             return Results.Ok(new { saldo });
         });
 
         // Inventário: informa o contado; o sistema lança a diferença (tipo I)
-        g.MapPost("/inventario", async (Db db, InventarioInput i, CancellationToken ct) =>
+        gAjuste.MapPost("/inventario", async (ClaimsPrincipal user, Db db, InventarioInput i, CancellationToken ct) =>
         {
             var itens = i.Itens?.Where(x => x.Contado >= 0).ToList() ?? [];
             if (itens.Count == 0) return Erro("Nenhuma contagem informada.");
             using var c = await db.OpenAsync(ct);
             using var tx = c.BeginTransaction();
-            var u = await UsuarioEndpoints.AutenticarAsync(c, i.UsuarioId, i.Pin, tx);
-            if (u is null || u.Perfil == "Garçom") return Erro("PIN incorreto ou usuário sem permissão de estoque.");
 
             var ajustes = new List<object>();
             foreach (var x in itens)
@@ -122,7 +122,7 @@ public static class EstoqueEndpoints
                 if (dif == 0) continue;
                 await Estoque.MovimentarAsync(c, x.ProdutoId, "I", dif, null, null,
                     $"Inventário: sistema {atual.Value:0.###}, contado {x.Contado:0.###}" + (string.IsNullOrWhiteSpace(i.Observacao) ? "" : " · " + i.Observacao.Trim()),
-                    u.Id, tx);
+                    user.Id(), tx);
                 ajustes.Add(new { x.ProdutoId, sistema = atual.Value, contado = x.Contado, diferenca = dif });
             }
             tx.Commit();

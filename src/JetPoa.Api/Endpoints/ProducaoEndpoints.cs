@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using JetPoa.Api.Auth;
 using Dapper;
 using JetPoa.Api.Data;
 using JetPoa.Api.Impressao;
@@ -33,7 +35,7 @@ public static class ProducaoEndpoints
 
     public static void MapProducao(this IEndpointRouteBuilder app)
     {
-        var g = app.MapGroup("/api/producao").WithTags("Produção");
+        var g = app.MapGroup("/api/producao").WithTags("Produção").RequireAuthorization(Permissoes.ProducaoVer);
 
         // Envios recentes (últimas 12h) ou apenas os com erro
         g.MapGet("/envios", async (Db db, bool? somenteErros, CancellationToken ct) =>
@@ -80,7 +82,7 @@ public static class ProducaoEndpoints
             return Results.Accepted();
         });
 
-        var s = app.MapGroup("/api/setores").WithTags("Produção");
+        var s = app.MapGroup("/api/setores").WithTags("Produção").RequireAuthorization(Permissoes.ProducaoConfigurar);
 
         s.MapPut("/{id:long}", async (Db db, long id, SetorInput i, CancellationToken ct) =>
         {

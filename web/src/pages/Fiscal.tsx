@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { api, brl, hora, type ComandaSemNota, type FiscalStatus, type Nota, type Usuario } from '../api'
+import { api, brl, hora, P, type ComandaSemNota, type FiscalStatus, type Nota } from '../api'
+import { useSessao } from '../sessao'
 
 const SIT: Record<string, string> = {
   AUTORIZADA: 'tag ok', CANCELADA: 'tag', SUBSTITUIDA: 'tag', INUTILIZADA: 'tag',
@@ -9,6 +10,8 @@ const SIT: Record<string, string> = {
 type Msg = { tipo: 'ok' | 'erro'; texto: string }
 
 export default function Fiscal() {
+  const { pode } = useSessao()
+  const emitir = pode(P.fiscalEmitir), cancelar = pode(P.fiscalCancelar)
   const [status, setStatus] = useState<FiscalStatus>()
   const [sefaz, setSefaz] = useState<string>()
   const [notas, setNotas] = useState<Nota[]>([])
@@ -60,7 +63,7 @@ export default function Fiscal() {
           )}
           <div className="acoes">
             <button className="sec" onClick={verSefaz} disabled={!status?.configurada}>Status da SEFAZ</button>
-            <button className="sec" onClick={() => setInutilizando({ inicial: 0, final: 0 })} disabled={!status?.configurada}>Inutilizar números</button>
+            {cancelar && <button className="sec" onClick={() => setInutilizando({ inicial: 0, final: 0 })} disabled={!status?.configurada}>Inutilizar números</button>}
           </div>
           {sefaz && <small>{sefaz}</small>}
         </div>
@@ -88,7 +91,7 @@ export default function Fiscal() {
                   <td>{new Date(c.fechadaEm).toLocaleDateString('pt-BR')} {hora(c.fechadaEm)}</td>
                   <td className="num">{brl(c.valorTotal)}</td>
                   <td className="detalhe-erro">{c.ultimaSituacao ? `${c.ultimaSituacao} · ${c.ultimoMotivo ?? ''}` : 'nunca emitida'}</td>
-                  <td><button className="sec" disabled={!status?.configurada} onClick={() => acao(() => api.emitirNota(c.id), `Comanda ${c.numero}`)}>Emitir NFC-e</button></td>
+                  <td>{emitir && <button className="sec" disabled={!status?.configurada} onClick={() => acao(() => api.emitirNota(c.id), `Comanda ${c.numero}`)}>Emitir NFC-e</button>}</td>
                 </tr>
               ))}
             </tbody>
@@ -117,13 +120,13 @@ export default function Fiscal() {
               <td className="acoes-linha">
                 <a className="sec botao-link" href={`/api/fiscal/notas/${n.id}/danfe`} target="_blank" rel="noreferrer">DANFE</a>
                 <a className="sec botao-link" href={`/api/fiscal/notas/${n.id}/xml`}>XML</a>
-                {['AUTORIZADA', 'CONTINGENCIA'].includes(n.situacao) &&
+                {emitir && ['AUTORIZADA', 'CONTINGENCIA'].includes(n.situacao) &&
                   <button className="sec" onClick={() => acao(async () => { await api.imprimirNota(n.id); return { situacao: 'IMPRESSO', mensagem: null } }, `NFC-e ${n.numero}`)}>Imprimir</button>}
                 {n.situacao === 'REJEITADA' && <>
-                  <button className="sec" onClick={() => acao(() => api.reenviarNota(n.id), `NFC-e ${n.numero}`)}>Reenviar</button>
-                  <button className="sec" onClick={() => setInutilizando({ inicial: n.numero, final: n.numero })}>Inutilizar</button>
+                  {emitir && <button className="sec" onClick={() => acao(() => api.reenviarNota(n.id), `NFC-e ${n.numero}`)}>Reenviar</button>}
+                  {cancelar && <button className="sec" onClick={() => setInutilizando({ inicial: n.numero, final: n.numero })}>Inutilizar</button>}
                 </>}
-                {n.situacao === 'AUTORIZADA' && <button className="sec" onClick={() => setCancelando(n)}>Cancelar</button>}
+                {cancelar && n.situacao === 'AUTORIZADA' && <button className="sec" onClick={() => setCancelando(n)}>Cancelar</button>}
               </td>
             </tr>
           ))}
@@ -134,26 +137,13 @@ export default function Fiscal() {
   )
 }
 
-function Gerentes({ value, onChange }: { value: number | null; onChange: (v: number | null) => void }) {
-  const [lista, setLista] = useState<Usuario[]>([])
-  useEffect(() => { api.usuarios().then(u => setLista(u.filter(x => x.ativo === 'S' && x.autorizaDesconto === 'S'))).catch(() => {}) }, [])
-  return (
-    <select value={value ?? ''} onChange={e => onChange(Number(e.target.value) || null)} required>
-      <option value="">Gerente…</option>
-      {lista.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
-    </select>
-  )
-}
-
 function CancelarNota({ nota, onFim }: { nota: Nota; onFim: (m?: Msg) => void }) {
   const [just, setJust] = useState('')
-  const [usuarioId, setUsuarioId] = useState<number | null>(null)
-  const [pin, setPin] = useState('')
   const [erro, setErro] = useState<string>()
   const enviar = async (e: FormEvent) => {
     e.preventDefault()
     try {
-      const r = await api.cancelarNota(nota.id, just, usuarioId!, pin)
+      const r = await api.cancelarNota(nota.id, just)
       if (r.situacao === 'CANCELADA') onFim({ tipo: 'ok', texto: `NFC-e ${nota.numero} cancelada.` })
       else setErro(r.mensagem ?? r.situacao)
     } catch (err) { setErro((err as Error).message) }
@@ -164,8 +154,6 @@ function CancelarNota({ nota, onFim }: { nota: Nota; onFim: (m?: Msg) => void })
       <p className="alerta-box">O cancelamento é enviado à SEFAZ e não pode ser desfeito. Há prazo legal após a autorização.</p>
       <div className="grade">
         <label className="largo">Justificativa (15 a 255 caracteres)*<input value={just} onChange={e => setJust(e.target.value)} minLength={15} maxLength={255} required /></label>
-        <label>Autorizado por<Gerentes value={usuarioId} onChange={setUsuarioId} /></label>
-        <label>PIN<input type="password" inputMode="numeric" autoComplete="off" value={pin} onChange={e => setPin(e.target.value.replace(/\D/g, ''))} required /></label>
       </div>
       {erro && <p className="erro">{erro}</p>}
       <div className="acoes"><button type="submit">Cancelar nota</button><button type="button" className="sec" onClick={() => onFim()}>Voltar</button></div>
@@ -177,13 +165,11 @@ function Inutilizar({ serie, onFim }: { serie: number; onFim: (m?: Msg) => void 
   const [ini, setIni] = useState('')
   const [fim, setFim] = useState('')
   const [just, setJust] = useState('')
-  const [usuarioId, setUsuarioId] = useState<number | null>(null)
-  const [pin, setPin] = useState('')
   const [erro, setErro] = useState<string>()
   const enviar = async (e: FormEvent) => {
     e.preventDefault()
     try {
-      const r = await api.inutilizar({ serie, inicial: Number(ini), final: Number(fim || ini), justificativa: just, usuarioId: usuarioId!, pin })
+      const r = await api.inutilizar({ serie, inicial: Number(ini), final: Number(fim || ini), justificativa: just })
       if (r.situacao === 'INUTILIZADA') onFim({ tipo: 'ok', texto: `Números ${ini}–${fim || ini} inutilizados.` })
       else setErro(r.mensagem ?? r.situacao)
     } catch (err) { setErro((err as Error).message) }
@@ -195,8 +181,6 @@ function Inutilizar({ serie, onFim }: { serie: number; onFim: (m?: Msg) => void 
         <label>Número inicial*<input value={ini} onChange={e => setIni(e.target.value.replace(/\D/g, ''))} required /></label>
         <label>Número final<input value={fim} onChange={e => setFim(e.target.value.replace(/\D/g, ''))} placeholder="igual ao inicial" /></label>
         <label className="largo">Justificativa (15 a 255 caracteres)*<input value={just} onChange={e => setJust(e.target.value)} minLength={15} maxLength={255} required /></label>
-        <label>Autorizado por<Gerentes value={usuarioId} onChange={setUsuarioId} /></label>
-        <label>PIN<input type="password" inputMode="numeric" autoComplete="off" value={pin} onChange={e => setPin(e.target.value.replace(/\D/g, ''))} required /></label>
       </div>
       {erro && <p className="erro">{erro}</p>}
       <div className="acoes"><button type="submit">Inutilizar</button><button type="button" className="sec" onClick={() => onFim()}>Voltar</button></div>

@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using JetPoa.Api.Auth;
 using System.Data;
 using System.Text.Json;
 using Dapper;
@@ -27,13 +29,13 @@ public static class FechamentoEndpoints
 
     public sealed record PagamentoInput(long FormaPagamentoId, decimal Valor, decimal? ValorRecebido, string? Autorizacao);
 
-    public sealed record SimularInput(Pedido Pedido, long? OperadorId);
+    public sealed record SimularInput(Pedido Pedido);
 
+    /// <summary>O operador é o usuário logado; Autorizador/PIN só quando outra pessoa (gerente) libera algo acima do limite.</summary>
     public sealed record FecharInput(
-        Pedido Pedido, long OperadorId, string OperadorPin, long? AutorizadorId, string? AutorizadorPin,
-        List<PagamentoInput>? Pagamentos, string? CpfCnpjNota);
+        Pedido Pedido, long? AutorizadorId, string? AutorizadorPin, List<PagamentoInput>? Pagamentos, string? CpfCnpjNota);
 
-    public sealed record CancelarComandaInput(string Motivo, long UsuarioId, string Pin);
+    public sealed record CancelarComandaInput(string Motivo, long? AutorizadorId, string? AutorizadorPin);
 
     private sealed class ItemRow
     {
@@ -62,6 +64,7 @@ public static class FechamentoEndpoints
     public static void MapFechamento(this IEndpointRouteBuilder app)
     {
         var g = app.MapGroup("/api").WithTags("Fechamento");
+        var gFechar = g.MapGroup("").RequireAuthorization(Permissoes.ComandaFechar);
 
         g.MapGet("/fechamento/apoio", async (Db db, CancellationToken ct) =>
         {
@@ -70,31 +73,28 @@ public static class FechamentoEndpoints
                 "select id, codigo, nome, tpag_nfce, aceita_troco from forma_pagamento where ativo = 'S' order by ordem");
             var motivos = await c.QueryAsync<MotivoDesconto>(
                 "select id, nome, exige_observacao from motivo_desconto where ativo = 'S' order by id");
-            var operadores = await c.QueryAsync<UsuarioEndpoints.Usuario>("""
+            // quem pode autorizar acima do limite do operador logado (gerentes/admins com PIN)
+            var autorizadores = await c.QueryAsync<UsuarioEndpoints.Usuario>("""
                 select u.id, u.nome, u.login, u.perfil_id, p.nome perfil, p.limite_desconto_pct, p.autoriza_desconto, u.ativo
                   from usuario u join perfil p on p.id = u.perfil_id
-                 where u.ativo = 'S' and p.nome <> 'Garçom' order by u.nome
+                 where u.ativo = 'S' and p.autoriza_desconto = 'S' and u.pin_hash is not null order by u.nome
                 """);
-            return new { formas, motivos, operadores, taxaServicoPadraoPct = await TaxaPadraoAsync(c, null) };
+            return new { formas, motivos, autorizadores, taxaServicoPadraoPct = await TaxaPadraoAsync(c, null) };
         });
 
         // Calcula sem gravar: mostra descontos, total e se precisa de autorização
-        g.MapPost("/comandas/{id:long}/fechamento/simular", async (Db db, long id, SimularInput i, CancellationToken ct) =>
+        gFechar.MapPost("/comandas/{id:long}/fechamento/simular", async (ClaimsPrincipal user, Db db, long id, SimularInput i, CancellationToken ct) =>
         {
             using var c = await db.OpenAsync(ct);
             var ctx = await CarregarAsync(c, id, null);
             if (ctx is null) return Results.NotFound();
             var r = Calcular(ctx.Itens, ctx.Categoria, i.Pedido ?? new Pedido(false, null, null, null), ctx.TaxaPadrao);
-            decimal? limite = null;
-            if (i.OperadorId is not null)
-                limite = await c.ExecuteScalarAsync<decimal?>(
-                    "select p.limite_desconto_pct from usuario u join perfil p on p.id = u.perfil_id where u.id = :op",
-                    new { op = i.OperadorId });
-            var exige = r.ConsumoInterno || (limite is not null && r.DescontoConcedidoPct > limite);
-            return Results.Ok(new { calculo = r, limiteOperadorPct = limite, exigeAutorizacao = exige });
+            var op = (await UsuarioEndpoints.ObterAsync(c, user.Id()))!;
+            var exige = r.ConsumoInterno ? op.AutorizaDesconto != "S" : r.DescontoConcedidoPct > op.LimiteDescontoPct;
+            return Results.Ok(new { calculo = r, limiteOperadorPct = op.LimiteDescontoPct, exigeAutorizacao = exige });
         });
 
-        g.MapPost("/comandas/{id:long}/fechar", async (Db db, Fiscal.NfceService nfce, Microsoft.Extensions.Options.IOptionsMonitor<Fiscal.NfceOptions> nfceOpt,
+        gFechar.MapPost("/comandas/{id:long}/fechar", async (ClaimsPrincipal user, Db db, Fiscal.NfceService nfce, Microsoft.Extensions.Options.IOptionsMonitor<Fiscal.NfceOptions> nfceOpt,
                                                        long id, FecharInput i, CancellationToken ct) =>
         {
             using var c = await db.OpenAsync(ct);
@@ -109,9 +109,9 @@ public static class FechamentoEndpoints
             if (await c.ExecuteScalarAsync<int>("select count(*) from comanda where id = :id and cliente_id is null", new { id }, tx) > 0)
                 return Erro("Vincule um cliente cadastrado à comanda antes de fechar.");
 
-            // operador
-            var operador = await UsuarioEndpoints.AutenticarAsync(c, i.OperadorId, i.OperadorPin, tx);
-            if (operador is null) return Erro("PIN do operador incorreto.");
+            // operador = usuário logado
+            var operador = await UsuarioEndpoints.ObterAsync(c, user.Id(), tx);
+            if (operador is null) return Results.Unauthorized();
 
             var pedido = i.Pedido ?? new Pedido(false, null, null, null);
             var r = Calcular(ctx.Itens, ctx.Categoria, pedido, ctx.TaxaPadrao);
@@ -237,28 +237,35 @@ public static class FechamentoEndpoints
         });
 
         // Cancela comanda inteira (ex.: aberta por engano). Com itens ativos exige quem autoriza desconto.
-        g.MapPost("/comandas/{id:long}/cancelar", async (Db db, long id, CancelarComandaInput i, CancellationToken ct) =>
+        gFechar.MapPost("/comandas/{id:long}/cancelar", async (ClaimsPrincipal user, Db db, long id, CancelarComandaInput i, CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(i.Motivo) || i.Motivo.Trim().Length < 3) return Erro("Informe o motivo.");
             using var c = await db.OpenAsync(ct);
             using var tx = c.BeginTransaction();
-            var u = await UsuarioEndpoints.AutenticarAsync(c, i.UsuarioId, i.Pin, tx);
-            if (u is null) return Erro("PIN incorreto.");
             var sit = await c.ExecuteScalarAsync<string?>("select situacao from comanda where id = :id for update", new { id }, tx);
             if (sit is null) return Results.NotFound();
             if (sit != "A") return Erro("Comanda não está aberta.");
             var ativos = await c.ExecuteScalarAsync<int>(
                 "select count(*) from comanda_item where comanda_id = :id and situacao = 'A'", new { id }, tx);
-            if (ativos > 0 && u.AutorizaDesconto != "S")
-                return Erro("Comanda com itens: somente gerente pode cancelar.");
+            long? autorizador = null;
+            if (ativos > 0 && !user.Pode(Permissoes.ComandaCancelar))
+            {
+                // caixa logado: precisa de um gerente autorizando com PIN
+                if (i.AutorizadorId is null) return Erro("Comanda com itens: cancelamento exige autorização de gerente.");
+                var aut = await UsuarioEndpoints.AutenticarAsync(c, i.AutorizadorId.Value, i.AutorizadorPin, tx);
+                if (aut is null) return Erro("PIN do autorizador incorreto.");
+                if (!Permissoes.DoPerfil(aut.Perfil).Contains(Permissoes.ComandaCancelar)) return Erro($"{aut.Nome} não pode autorizar cancelamento.");
+                autorizador = aut.Id;
+            }
             await c.ExecuteAsync("""
-                update comanda set situacao = 'C', fechada_em = sysdate, fechada_por = :usr, motivo_cancelamento = :motivo, valor_total = 0
+                update comanda set situacao = 'C', fechada_em = sysdate, fechada_por = :usr, motivo_cancelamento = :motivo, valor_total = 0,
+                       desconto_autorizado_por = :aut
                  where id = :id
-                """, new { id, usr = u.Id, motivo = i.Motivo.Trim() }, tx);
+                """, new { id, usr = user.Id(), aut = autorizador, motivo = i.Motivo.Trim() }, tx);
             await c.ExecuteAsync("""
                 insert into auditoria (usuario_id, entidade, entidade_id, acao, detalhe)
                 values (:usr, 'COMANDA', :id, 'CANCELAMENTO', :detalhe)
-                """, new { usr = u.Id, id = id.ToString(), detalhe = JsonSerializer.Serialize(new { motivo = i.Motivo.Trim(), itensAtivos = ativos }) }, tx);
+                """, new { usr = user.Id(), id = id.ToString(), detalhe = JsonSerializer.Serialize(new { motivo = i.Motivo.Trim(), itensAtivos = ativos, autorizador }) }, tx);
             tx.Commit();
             return Results.NoContent();
         });

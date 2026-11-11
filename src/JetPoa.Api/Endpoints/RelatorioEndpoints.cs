@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using JetPoa.Api.Auth;
 using Dapper;
 using JetPoa.Api.Data;
 
@@ -122,6 +124,6 @@ public static class RelatorioEndpoints
 
             return Results.Ok(new { de = ini, ate = fim.AddDays(-1), resumo, porDia, porHora, porForma, porEntrada, porCategoria,
                                     porProduto, porGarcom, descontosPorMotivo, descontosPorOperador });
-        }).WithTags("Relatórios");
+        }).WithTags("Relatórios").RequireAuthorization(Permissoes.Relatorios);
     }
 }

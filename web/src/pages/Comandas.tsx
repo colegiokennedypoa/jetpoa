@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { api, brl, hora, type Area, type Cliente, type ComandaItem, type ComandaResumo, type Usuario } from '../api'
+import { api, brl, hora, P, type Area, type Cliente, type ComandaItem, type ComandaResumo, type Usuario } from '../api'
+import { useSessao } from '../sessao'
 import Lancamento from '../components/Lancamento'
 import FecharConta from '../components/FecharConta'
 import BuscaCliente from '../components/BuscaCliente'
@@ -125,6 +126,9 @@ function AbrirComanda({ onAberta, onCancelar }: { onAberta: (id: number) => void
 function CancelarComanda({ id, temItens, onVoltar, onCancelada }: {
   id: number; temItens: boolean; onVoltar: () => void; onCancelada: () => void
 }) {
+  const { eu, pode } = useSessao()
+  // com itens lançados, quem não é gerente precisa da autorização (PIN) de um gerente
+  const precisaAutorizador = temItens && !pode(P.comandaCancelar)
   const [usuarios, setUsuarios] = useState<Usuario[]>([])
   const [usuarioId, setUsuarioId] = useState<number | null>(null)
   const [pin, setPin] = useState('')
@@ -132,29 +136,31 @@ function CancelarComanda({ id, temItens, onVoltar, onCancelada }: {
   const [erro, setErro] = useState<string>()
 
   useEffect(() => {
-    api.usuarios().then(u => setUsuarios(u.filter(x => x.ativo === 'S' && (!temItens || x.autorizaDesconto === 'S')))).catch(() => {})
-  }, [temItens])
+    if (precisaAutorizador) api.autorizadores().then(u => setUsuarios(u.filter(x => x.id !== eu.id))).catch(() => {})
+  }, [precisaAutorizador, eu.id])
 
   const confirmar = async (e: FormEvent) => {
     e.preventDefault()
-    if (!usuarioId) return
-    try { await api.cancelarComanda(id, motivo, usuarioId, pin); onCancelada() }
+    if (precisaAutorizador && !usuarioId) return
+    try { await api.cancelarComanda(id, motivo, precisaAutorizador ? usuarioId : null, precisaAutorizador ? pin : null); onCancelada() }
     catch (err) { setErro((err as Error).message) }
   }
 
   return (
     <form className="cartao" onSubmit={confirmar}>
       <h3>Cancelar comanda</h3>
-      {temItens && <p className="alerta-box">A comanda tem itens lançados: somente gerente pode cancelar.</p>}
+      {precisaAutorizador && <p className="alerta-box">A comanda tem itens lançados: é preciso a autorização de um gerente.</p>}
       <div className="grade">
         <label>Motivo*<input value={motivo} onChange={e => setMotivo(e.target.value)} required minLength={3} /></label>
-        <label>Usuário
-          <select value={usuarioId ?? ''} onChange={e => setUsuarioId(Number(e.target.value) || null)} required>
-            <option value="">Selecione…</option>
-            {usuarios.map(u => <option key={u.id} value={u.id}>{u.nome} ({u.perfil})</option>)}
-          </select>
-        </label>
-        <label>PIN<input type="password" inputMode="numeric" autoComplete="off" value={pin} onChange={e => setPin(e.target.value.replace(/\D/g, ''))} required /></label>
+        {precisaAutorizador && <>
+          <label>Autorizado por
+            <select value={usuarioId ?? ''} onChange={e => setUsuarioId(Number(e.target.value) || null)} required>
+              <option value="">Selecione…</option>
+              {usuarios.map(u => <option key={u.id} value={u.id}>{u.nome} ({u.perfil})</option>)}
+            </select>
+          </label>
+          <label>PIN do gerente<input type="password" inputMode="numeric" autoComplete="off" value={pin} onChange={e => setPin(e.target.value.replace(/\D/g, ''))} required /></label>
+        </>}
       </div>
       {erro && <p className="erro">{erro}</p>}
       <div className="acoes">
@@ -168,6 +174,7 @@ function CancelarComanda({ id, temItens, onVoltar, onCancelada }: {
 function DetalheComanda({ id, onMudou, onMsg, onEncerrada }: {
   id: number; onMudou: () => void; onEncerrada: () => void; onMsg: (m: { tipo: 'ok' | 'erro'; texto: string }) => void
 }) {
+  const { pode } = useSessao()
   const [dados, setDados] = useState<{ comanda: ComandaResumo; itens: ComandaItem[] }>()
   const [modo, setModo] = useState<'ver' | 'lancar' | 'fechar' | 'cancelar'>('ver')
   const lancando = modo === 'lancar'
@@ -206,10 +213,10 @@ function DetalheComanda({ id, onMudou, onMsg, onEncerrada }: {
         <span className="total">{brl(c.valorTotal ?? c.total)}</span>
         {c.situacao === 'A' ? (
           <span className="acoes-cab">
-            <button onClick={() => setLancando(l => !l)}>{lancando ? 'Fechar lançamento' : '+ Lançar itens'}</button>
-            <button onClick={() => setModo('fechar')} disabled={c.qtdItens === 0 || c.clienteId == null}
-              title={c.clienteId == null ? 'Vincule um cliente antes de fechar' : undefined}>Fechar conta</button>
-            <button className="sec" onClick={() => setModo('cancelar')}>Cancelar comanda</button>
+            {pode(P.comandaLancar) && <button onClick={() => setLancando(l => !l)}>{lancando ? 'Fechar lançamento' : '+ Lançar itens'}</button>}
+            {pode(P.comandaFechar) && <button onClick={() => setModo('fechar')} disabled={c.qtdItens === 0 || c.clienteId == null}
+              title={c.clienteId == null ? 'Vincule um cliente antes de fechar' : undefined}>Fechar conta</button>}
+            {pode(P.comandaFechar) && <button className="sec" onClick={() => setModo('cancelar')}>Cancelar comanda</button>}
           </span>
         ) : <span className="tag ok">{c.situacao === 'F' ? 'Fechada' : 'Cancelada'}</span>}
       </div>
@@ -254,7 +261,7 @@ function DetalheComanda({ id, onMudou, onMsg, onEncerrada }: {
               <td>{i.impressao ? <span className={IMPRESSAO[i.impressao][1]} title={i.erroImpressao ?? ''}>{IMPRESSAO[i.impressao][0]}</span> : '—'}</td>
               <td>{i.garcom ?? '—'}</td>
               <td>{hora(i.lancadoEm)}</td>
-              <td>{i.situacao === 'A' && c.situacao === 'A' && <button className="sec" onClick={() => cancelar(i)}>Cancelar</button>}
+              <td>{i.situacao === 'A' && c.situacao === 'A' && pode(P.itemCancelar) && <button className="sec" onClick={() => cancelar(i)}>Cancelar</button>}
                 {i.valorDesconto > 0 && <small className="obs">desc. {brl(i.valorDesconto)}</small>}</td>
             </tr>
           ))}

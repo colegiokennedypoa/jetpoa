@@ -1,12 +1,14 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { api, brl, gravarLocal, lerLocal, type Area, type Cliente, type Evento, type ProdutoResumo } from '../api'
+import { api, brl, gravarLocal, lerLocal, P, type Area, type Cliente, type Evento, type ProdutoResumo } from '../api'
 import BuscaCliente from '../components/BuscaCliente'
+import { useSessao } from '../sessao'
 
 const CHAVE_ENTRADA = 'jetpoa.checkin.entrada'
 type Msg = { tipo: 'ok' | 'erro'; texto: string }
 
 /** Portaria TERRA / RIO: check-in (abre comanda + taxas do evento) e check-out. */
 export default function Checkin() {
+  const { pode } = useSessao()
   const [entrada, setEntrada] = useState<'T' | 'R'>(() => (lerLocal(CHAVE_ENTRADA) === 'R' ? 'R' : 'T'))
   const [evento, setEvento] = useState<Evento | null>(null)
   const [presentes, setPresentes] = useState<{ entrada: string; quantidade: number }[]>([])
@@ -31,7 +33,7 @@ export default function Checkin() {
         <span className="segmentado mini">
           <button className={modo === 'entrada' ? 'ativo' : ''} onClick={() => setModo('entrada')}>Entrada</button>
           <button className={modo === 'saida' ? 'ativo' : ''} onClick={() => setModo('saida')}>Saída</button>
-          <button className={modo === 'eventos' ? 'ativo' : ''} onClick={() => setModo('eventos')}>Eventos</button>
+          {pode(P.eventoEditar) && <button className={modo === 'eventos' ? 'ativo' : ''} onClick={() => setModo('eventos')}>Eventos</button>}
         </span>
         <span className="contador">No local hoje: Terra {qtd('T')} · Rio {qtd('R')}</span>
       </div>

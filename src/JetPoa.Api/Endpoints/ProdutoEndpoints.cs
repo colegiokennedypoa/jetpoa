@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using JetPoa.Api.Auth;
 using System.Text.Json;
 using Dapper;
 using JetPoa.Api.Data;
@@ -38,8 +40,7 @@ public static class ProdutoEndpoints
     public sealed record ProdutoInput(
         string Nome, string? Descricao, long CategoriaId, string Tipo, long SetorProducaoId, string? Unidade,
         decimal PrecoVenda, decimal? PrecoCusto, bool ControlaEstoque, decimal? EstoqueMinimo, bool Vendivel, bool Ativo, int? Ordem,
-        string? Ncm, string? Cest, string? Cfop, string? Csosn, string? CstPisCofins, string? Gtin,
-        long UsuarioId, string Pin);
+        string? Ncm, string? Cest, string? Cfop, string? Csosn, string? CstPisCofins, string? Gtin);
 
     private const string Select = """
         select id, nome, descricao, categoria_id, tipo, setor_producao_id, unidade, preco_venda, preco_custo, controla_estoque,
@@ -49,7 +50,8 @@ public static class ProdutoEndpoints
 
     public static void MapProdutos(this IEndpointRouteBuilder app)
     {
-        var g = app.MapGroup("/api/produtos").WithTags("Catálogo");
+        var g = app.MapGroup("/api/produtos").WithTags("Catálogo").RequireAuthorization(Permissoes.ProdutosVer);
+        var gEditar = g.MapGroup("").RequireAuthorization(Permissoes.ProdutosEditar);
 
         g.MapGet("/{id:long}", async (Db db, long id, CancellationToken ct) =>
         {
@@ -58,11 +60,11 @@ public static class ProdutoEndpoints
             return p is null ? Results.NotFound() : Results.Ok(p);
         });
 
-        g.MapPost("", async (Db db, ProdutoInput i, CancellationToken ct) => await SalvarAsync(db, null, i, ct));
-        g.MapPut("/{id:long}", async (Db db, long id, ProdutoInput i, CancellationToken ct) => await SalvarAsync(db, id, i, ct));
+        gEditar.MapPost("", async (ClaimsPrincipal user, Db db, ProdutoInput i, CancellationToken ct) => await SalvarAsync(db, null, i, user.Id(), ct));
+        gEditar.MapPut("/{id:long}", async (ClaimsPrincipal user, Db db, long id, ProdutoInput i, CancellationToken ct) => await SalvarAsync(db, id, i, user.Id(), ct));
     }
 
-    private static async Task<IResult> SalvarAsync(Db db, long? id, ProdutoInput i, CancellationToken ct)
+    private static async Task<IResult> SalvarAsync(Db db, long? id, ProdutoInput i, long usuarioId, CancellationToken ct)
     {
         string? Limpo(string? s) => string.IsNullOrWhiteSpace(s) ? null : new string(s.Where(char.IsLetterOrDigit).ToArray());
         var ncm = Limpo(i.Ncm); var cest = Limpo(i.Cest); var cfop = Limpo(i.Cfop); var csosn = Limpo(i.Csosn);
@@ -83,10 +85,6 @@ public static class ProdutoEndpoints
 
         using var c = await db.OpenAsync(ct);
         using var tx = c.BeginTransaction();
-        var u = await UsuarioEndpoints.AutenticarAsync(c, i.UsuarioId, i.Pin, tx);
-        if (u is null || u.AutorizaDesconto != "S")
-            return Results.UnprocessableEntity(new { erro = "Alterar produto exige PIN de gerente/administrador." });
-
         var antes = id is null ? null : await c.QuerySingleOrDefaultAsync<Produto>(Select + " where id = :id", new { id }, tx);
         if (id is not null && antes is null) return Results.NotFound();
 
@@ -96,7 +94,7 @@ public static class ProdutoEndpoints
             categoria = i.CategoriaId, tipo = i.Tipo, setor = i.SetorProducaoId, unidade = string.IsNullOrWhiteSpace(i.Unidade) ? "UN" : i.Unidade.Trim().ToUpperInvariant(),
             preco = i.PrecoVenda, custo = i.PrecoCusto, controla = i.Tipo == "P" && i.ControlaEstoque ? "S" : "N", minimo = i.EstoqueMinimo,
             vendivel = i.Vendivel ? "S" : "N", ativo = i.Ativo ? "S" : "N", ordem = i.Ordem ?? 0,
-            ncm, cest, cfop, csosn, cst, gtin, usr = u.Id
+            ncm, cest, cfop, csosn, cst, gtin, usr = usuarioId
         };
         long novoId;
         if (id is null)
@@ -125,7 +123,7 @@ public static class ProdutoEndpoints
         await c.ExecuteAsync("""
             insert into auditoria (usuario_id, entidade, entidade_id, acao, detalhe)
             values (:usr, 'PRODUTO', :pid, :acao, :detalhe)
-            """, new { usr = u.Id, pid = novoId.ToString(), acao = id is null ? "INSERT" : "UPDATE",
+            """, new { usr = usuarioId, pid = novoId.ToString(), acao = id is null ? "INSERT" : "UPDATE",
                       detalhe = new Clob(JsonSerializer.Serialize(new { antes, depois = p })) }, tx);
         tx.Commit();
         return Results.Ok(new { id = novoId, avisosFiscais = avisos });

@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
-import { api, brl, type ItemEstoque, type MovimentoEstoque } from '../api'
-import SeletorUsuario from '../components/SeletorUsuario'
+import { api, brl, P, type ItemEstoque, type MovimentoEstoque } from '../api'
+import { useSessao } from '../sessao'
 
 const TIPO: Record<string, string> = { V: 'Venda', E: 'Entrada', A: 'Ajuste', P: 'Perda', I: 'Inventário' }
 type Msg = { tipo: 'ok' | 'erro'; texto: string }
 
 export default function Estoque() {
+  const { pode } = useSessao()
+  const podeMov = pode(P.estoqueMovimentar), podeInv = pode(P.estoqueAjustar)
   const [itens, setItens] = useState<ItemEstoque[]>([])
   const [busca, setBusca] = useState('')
   const [abaixo, setAbaixo] = useState(false)
@@ -30,8 +32,8 @@ export default function Estoque() {
         <label><input type="checkbox" checked={abaixo} onChange={e => setAbaixo(e.target.checked)} /> Só abaixo do mínimo</label>
         <span className="segmentado mini">
           <button className={modo === 'lista' ? 'ativo' : ''} onClick={() => setModo('lista')}>Saldos</button>
-          <button className={modo === 'movimento' ? 'ativo' : ''} onClick={() => { setModo('movimento'); setSelecionado(null) }}>Entrada / perda</button>
-          <button className={modo === 'inventario' ? 'ativo' : ''} onClick={() => setModo('inventario')}>Inventário</button>
+          {podeMov && <button className={modo === 'movimento' ? 'ativo' : ''} onClick={() => { setModo('movimento'); setSelecionado(null) }}>Entrada / perda</button>}
+          {podeInv && <button className={modo === 'inventario' ? 'ativo' : ''} onClick={() => setModo('inventario')}>Inventário</button>}
           <button className={modo === 'historico' ? 'ativo' : ''} onClick={() => setModo('historico')}>Movimentos</button>
         </span>
         <span className="contador">{filtrados.length} produtos · estoque a custo {brl(valorEstoque)}</span>
@@ -55,7 +57,7 @@ export default function Estoque() {
                 <td className="num">{i.vendidoHoje || ''}</td>
                 <td className="num">{i.precoCusto != null ? brl(i.precoCusto) : '—'}</td>
                 <td className="acoes-linha">
-                  <button className="sec" onClick={() => { setSelecionado(i); setModo('movimento') }}>Movimentar</button>
+                  {podeMov && <button className="sec" onClick={() => { setSelecionado(i); setModo('movimento') }}>Movimentar</button>}
                   <button className="sec" onClick={() => { setSelecionado(i); setModo('historico') }}>Histórico</button>
                 </td>
               </tr>
@@ -73,8 +75,7 @@ function Movimento({ itens, inicial, onFim }: { itens: ItemEstoque[]; inicial: I
   const [qtd, setQtd] = useState('')
   const [custo, setCusto] = useState('')
   const [obs, setObs] = useState('')
-  const [usuarioId, setUsuarioId] = useState<number | null>(null)
-  const [pin, setPin] = useState('')
+  const podeAjustar = useSessao().pode(P.estoqueAjustar)
   useEffect(() => { setProdutoId(inicial?.id ?? null) }, [inicial])
 
   const enviar = async (e: FormEvent) => {
@@ -82,11 +83,11 @@ function Movimento({ itens, inicial, onFim }: { itens: ItemEstoque[]; inicial: I
     try {
       const r = await api.movimentarEstoque({
         produtoId: produtoId!, tipo, quantidade: Number(qtd.replace(',', '.')),
-        custoUnitario: tipo === 'E' && custo ? Number(custo.replace(',', '.')) : null, observacao: obs || null, usuarioId: usuarioId!, pin,
+        custoUnitario: tipo === 'E' && custo ? Number(custo.replace(',', '.')) : null, observacao: obs || null,
       })
       const p = itens.find(i => i.id === produtoId)
       onFim({ tipo: 'ok', texto: `${TIPO[tipo]} registrada em ${p?.nome}: saldo agora ${r.saldo}.` })
-      setQtd(''); setCusto(''); setObs(''); setPin('')
+      setQtd(''); setCusto(''); setObs('')
     } catch (err) { onFim({ tipo: 'erro', texto: (err as Error).message }) }
   }
 
@@ -104,13 +105,12 @@ function Movimento({ itens, inicial, onFim }: { itens: ItemEstoque[]; inicial: I
           <span className="segmentado">
             <button type="button" className={tipo === 'E' ? 'ativo' : ''} onClick={() => setTipo('E')}>Entrada</button>
             <button type="button" className={tipo === 'P' ? 'ativo' : ''} onClick={() => setTipo('P')}>Perda</button>
-            <button type="button" className={tipo === 'A' ? 'ativo' : ''} onClick={() => setTipo('A')}>Ajuste ±</button>
+            {podeAjustar && <button type="button" className={tipo === 'A' ? 'ativo' : ''} onClick={() => setTipo('A')}>Ajuste ±</button>}
           </span>
         </label>
         <label>Quantidade*<input value={qtd} onChange={e => setQtd(e.target.value)} inputMode="decimal" required placeholder={tipo === 'A' ? 'use - para reduzir' : ''} /></label>
         {tipo === 'E' && <label>Custo unitário (atualiza o custo)<input value={custo} onChange={e => setCusto(e.target.value)} inputMode="decimal" /></label>}
         <label className="largo">{tipo === 'E' ? 'Observação (ex.: NF / fornecedor)' : 'Motivo*'}<input value={obs} onChange={e => setObs(e.target.value)} required={tipo !== 'E'} /></label>
-        <SeletorUsuario usuarioId={usuarioId} pin={pin} onUsuario={setUsuarioId} onPin={setPin} somenteGerentes={tipo === 'A'} />
       </div>
       <div className="acoes"><button type="submit">Registrar</button></div>
     </form>
@@ -120,8 +120,6 @@ function Movimento({ itens, inicial, onFim }: { itens: ItemEstoque[]; inicial: I
 function Inventario({ itens, onFim }: { itens: ItemEstoque[]; onFim: (m: Msg) => void }) {
   const [contagem, setContagem] = useState<Record<number, string>>({})
   const [obs, setObs] = useState('')
-  const [usuarioId, setUsuarioId] = useState<number | null>(null)
-  const [pin, setPin] = useState('')
   const informados = Object.entries(contagem).filter(([, v]) => v.trim() !== '')
 
   const enviar = async (e: FormEvent) => {
@@ -129,7 +127,7 @@ function Inventario({ itens, onFim }: { itens: ItemEstoque[]; onFim: (m: Msg) =>
     try {
       const r = await api.inventario({
         itens: informados.map(([id, v]) => ({ produtoId: Number(id), contado: Number(v.replace(',', '.')) })),
-        observacao: obs || null, usuarioId: usuarioId!, pin,
+        observacao: obs || null,
       })
       onFim({ tipo: 'ok', texto: `Inventário registrado: ${r.ajustados} produto(s) ajustado(s) de ${informados.length} contado(s).` })
     } catch (err) { onFim({ tipo: 'erro', texto: (err as Error).message }) }
@@ -157,7 +155,6 @@ function Inventario({ itens, onFim }: { itens: ItemEstoque[]; onFim: (m: Msg) =>
       <div className="cartao" style={{ marginTop: '0.8rem' }}>
         <div className="grade">
           <label className="largo">Observação<input value={obs} onChange={e => setObs(e.target.value)} /></label>
-          <SeletorUsuario usuarioId={usuarioId} pin={pin} onUsuario={setUsuarioId} onPin={setPin} />
         </div>
         <div className="acoes"><button type="submit" disabled={informados.length === 0}>Registrar inventário ({informados.length})</button></div>
       </div>

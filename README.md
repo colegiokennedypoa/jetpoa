@@ -67,13 +67,30 @@ As mesmas chaves também podem vir por variável de ambiente. Valor vazio no arq
   - a nota online fica **VERIFICAR**;
   - é emitida outra em **contingência offline** (tpEmis 9) com o próximo número, e o DANFE sai com o aviso;
   - a cada minuto, a rotina transmite as contingências e consulta as notas a verificar. Se a original foi autorizada, ela é cancelada (substituída); se não chegou na SEFAZ, o número é inutilizado.
-- **Tela Fiscal:** status do certificado (dias para vencer), status da SEFAZ, notas das últimas 48h, DANFE (HTML), XML, reimpressão, reenvio de rejeitada, cancelamento e inutilização. Cancelar e inutilizar exigem PIN de gerente.
+- **Tela Fiscal:** status do certificado (dias para vencer), status da SEFAZ, notas das últimas 48h, DANFE (HTML), XML, reimpressão, reenvio de rejeitada, cancelamento e inutilização. Cancelar e inutilizar só aparecem para Gerente/Administrador.
 - **Testes:** `dotnet test` (28 testes). Chave e QR Code conferem com NFC-e autorizada pela SEFAZ-RS. Para conferir o hash do QR Code com o CSC real: `$env:JETPOA_TEST_CSC = "<csc>"`.
 
+## Login e perfis
+- **Entrada com usuário e senha** (cookie de sessão de 12 h, renovado com o uso). Sem nenhum usuário cadastrado, a tela de login cria o primeiro Administrador.
+- **Senha provisória:** quem cadastra o usuário define uma senha provisória; no primeiro acesso a pessoa é obrigada a trocá-la (mínimo 6 caracteres). Botão **Senha** no topo para trocar quando quiser.
+- **Segurança:** 5 senhas erradas bloqueiam o usuário por 15 minutos. Redefinir a senha, mudar o perfil ou desativar derruba as sessões abertas daquele usuário em até 30 s.
+- **Cada ação registra quem estava logado** (abriu comanda, lançou, cancelou item, fechou, deu desconto, movimentou estoque, alterou produto, cancelou nota).
+- **O que cada perfil vê e faz** (o servidor bloqueia cada rota; a tela só mostra o permitido):
+
+  | Perfil | Pode |
+  |---|---|
+  | Administrador | tudo, inclusive Usuários e Implantação |
+  | Gerente | tudo menos Usuários e Implantação: relatórios, produtos, impressoras, eventos, estoque (entrada, perda, ajuste, inventário), cancelar comanda com itens, cancelar/inutilizar NFC-e |
+  | Caixa | check-in, comandas (abrir, lançar, fechar, cancelar item), clientes, ver produção/fila, emitir NFC-e, ver estoque |
+  | Garçom | ver comandas e lançar itens |
+  | Check-in | portaria (check-in/check-out) e clientes |
+
+  As permissões ficam em `src/JetPoa.Api/Auth/Permissoes.cs`.
+- **PIN de autorização (opcional, só Gerente/Administrador):** serve para o gerente liberar, no caixa de outra pessoa, desconto acima do limite, consumo interno ou cancelamento de comanda com itens.
+
 ## Fechamento (Fase 3)
-- **Primeiro uso:** na tela **Usuários**, crie o Administrador. Os demais usuários (Gerente, Caixa…) exigem o PIN de um administrador.
 - **Perfis:** Administrador (desconto até 100%, autoriza), Gerente (até 30%, autoriza), Caixa (até 5%), Garçom e Check-in (0%). Os limites ficam na tabela `perfil`.
-- **Fechar conta:** o operador escolhe o nome e digita o PIN. Se o desconto passar do limite dele, ou se for consumo interno, a tela pede o PIN de quem autoriza.
+- **Fechar conta:** vale o limite de desconto de quem está logado. Se o desconto passar do limite, ou se for consumo interno, a tela pede o gerente e o PIN dele.
 - **Descontos:** em % ou R$, no total ou num item, sempre com motivo (cadastro `motivo_desconto`; "Outro", "Reclamação" e "Parceria" exigem observação).
 - **Isenções automáticas pela categoria do cliente:** estacionamento (terra), embarque (rio) e couvert, conforme `cliente_categoria`. Não contam na alçada. A isenção manual conta.
 - **Taxa de serviço:** % padrão no parâmetro `TAXA_SERVICO_PCT` (hoje 0), editável no fechamento. Incide só sobre consumo, nunca sobre as taxas.
@@ -105,7 +122,7 @@ cd web; npm run dev                        # front em http://localhost:5173 (pro
 .\scripts\instalar-servico.ps1   # (Administrador) serviço JetPOABistro, reinício automático, firewall 5080 só rede local
 .\scripts\atualizar.ps1          # (Administrador) nova versão: compila/testa antes de parar e guarda a anterior
 ```
-- **Produtos:** criar e editar (preço, setor de impressão, estoque mínimo e dados fiscais com orientação), com PIN de gerente e auditoria.
+- **Produtos:** criar e editar (preço, setor de impressão, estoque mínimo e dados fiscais com orientação), só Gerente/Administrador, com auditoria.
 - **Importar clientes do Forms:** mailing, reservas, pedidos e comandas, com deduplicação por CPF/celular. Mostra prévia antes de gravar.
 - **Sincronizar produtos do Forms** durante o paralelo: novos, preço e ativo. Dados fiscais só preenchem o que está vazio.
 

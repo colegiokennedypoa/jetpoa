@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { api, type Cliente, type ClienteCategoria, type ClienteInput } from '../api'
+import { api, P, type Cliente, type ClienteCategoria, type ClienteInput } from '../api'
+import { useSessao } from '../sessao'
 
 const vazio: ClienteInput = {
   cpf: null, nome: '', celular: null, email: null, dataNascimento: null, sexo: null,
@@ -10,6 +11,7 @@ const fmtCpf = (v: string | null) => v?.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, 
 const fmtCel = (v: string | null) => v?.replace(/(\d{2})(\d{4,5})(\d{4})$/, '($1) $2-$3') ?? '—'
 
 export default function Clientes() {
+  const podeEditar = useSessao().pode(P.clientesEditar)
   const [categorias, setCategorias] = useState<ClienteCategoria[]>([])
   const [busca, setBusca] = useState('')
   const [lista, setLista] = useState<Cliente[]>([])
@@ -66,7 +68,7 @@ export default function Clientes() {
     <section className="clientes">
       <div className="filtros">
         <input placeholder="Buscar por nome, CPF ou celular…" value={busca} onChange={e => setBusca(e.target.value)} autoFocus />
-        <button onClick={novo}>+ Novo cliente</button>
+        {podeEditar && <button onClick={novo}>+ Novo cliente</button>}
         <span className="contador">{lista.length} encontrados</span>
       </div>
       {msg && <p className={msg.tipo}>{msg.texto}</p>}
@@ -113,7 +115,7 @@ export default function Clientes() {
             <tr key={c.id} className={c.ativo === 'S' ? '' : 'inativo'}>
               <td>{c.nome}</td><td>{fmtCpf(c.cpf)}</td><td>{fmtCel(c.celular)}</td><td>{c.categoria}</td>
               <td>{c.aceitaComunicacao === 'S' ? 'Sim' : 'Não'}</td>
-              <td><button className="sec" onClick={() => editar(c)}>Editar</button></td>
+              <td>{podeEditar && <button className="sec" onClick={() => editar(c)}>Editar</button>}</td>
             </tr>
           ))}
         </tbody>

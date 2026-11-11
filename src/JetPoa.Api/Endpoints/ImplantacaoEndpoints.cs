@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using JetPoa.Api.Auth;
 using System.Data;
 using System.Globalization;
 using System.Net.Sockets;
@@ -12,8 +14,6 @@ namespace JetPoa.Api.Endpoints;
 /// <summary>Ferramentas da virada: importar clientes e sincronizar produtos do Forms, e checklist de prontidão.</summary>
 public static class ImplantacaoEndpoints
 {
-    public sealed record AdminInput(long UsuarioId, string Pin);
-
     private sealed class ContatoLegado
     {
         public string Fonte { get; set; } = "";
@@ -47,13 +47,12 @@ public static class ImplantacaoEndpoints
 
     public static void MapImplantacao(this IEndpointRouteBuilder app)
     {
-        var g = app.MapGroup("/api/implantacao").WithTags("Implantação");
+        var g = app.MapGroup("/api/implantacao").WithTags("Implantação").RequireAuthorization(Permissoes.Implantacao);
 
         // ------------------------------------------------------------ clientes
-        g.MapPost("/clientes/importar", async (Db db, bool? aplicar, AdminInput a, CancellationToken ct) =>
+        g.MapPost("/clientes/importar", async (Db db, bool? aplicar, CancellationToken ct) =>
         {
             using var c = await db.OpenAsync(ct);
-            if (await AdminAsync(c, a) is { } erro) return erro;
 
             var contatos = (await c.QueryAsync<ContatoLegado>("""
                 select 'MAILING' fonte, nome, identificador doc, telefone tel, email, sexo, data from administrativo.tb_bar_mailing
@@ -127,10 +126,9 @@ public static class ImplantacaoEndpoints
         });
 
         // ------------------------------------------------------------ produtos
-        g.MapPost("/produtos/sincronizar", async (Db db, bool? aplicar, AdminInput a, CancellationToken ct) =>
+        g.MapPost("/produtos/sincronizar", async (Db db, bool? aplicar, CancellationToken ct) =>
         {
             using var c = await db.OpenAsync(ct);
-            if (await AdminAsync(c, a) is { } erro) return erro;
 
             var lista = (await c.QueryAsync<ProdLegado>("""
                 select l.cd_produto, trim(regexp_replace(l.ds_produto, ' {2,}', ' ')) ds_produto, l.vl_produto, l.fl_ativo,
@@ -281,12 +279,6 @@ public static class ImplantacaoEndpoints
 
             return Results.Ok(itens);
         });
-    }
-
-    private static async Task<IResult?> AdminAsync(IDbConnection c, AdminInput a)
-    {
-        var u = await UsuarioEndpoints.AutenticarAsync(c, a.UsuarioId, a.Pin);
-        return u is null || u.Perfil != "Administrador" ? Results.UnprocessableEntity(new { erro = "Exige PIN de Administrador." }) : null;
     }
 
     private static async Task<bool> TcpAbertaAsync(string host, int porta)

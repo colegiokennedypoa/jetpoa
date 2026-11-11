@@ -1,7 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { api, type Categoria, type ProdutoCompleto, type Setor } from '../api'
-import SeletorUsuario from './SeletorUsuario'
-
 type F = {
   nome: string; descricao: string; categoriaId: number | null; tipo: 'P' | 'K' | 'S'; setorProducaoId: number | null; unidade: string
   precoVenda: string; precoCusto: string; controlaEstoque: boolean; estoqueMinimo: string; vendivel: boolean; ativo: boolean
@@ -18,8 +16,6 @@ export default function EditarProduto({ id, categorias, onFim }: {
   const [setores, setSetores] = useState<Setor[]>([])
   const [orig, setOrig] = useState<ProdutoCompleto | null>(null)
   const [f, setF] = useState<F | null>(null)
-  const [usuarioId, setUsuarioId] = useState<number | null>(null)
-  const [pin, setPin] = useState('')
   const [erro, setErro] = useState<string>()
 
   useEffect(() => { api.setores().then(s => setSetores(s.filter(x => x.codigo !== 'CAIXA'))).catch(() => {}) }, [])
@@ -51,7 +47,7 @@ export default function EditarProduto({ id, categorias, onFim }: {
         nome: f.nome, descricao: txt(f.descricao), categoriaId: f.categoriaId!, tipo: f.tipo, setorProducaoId: f.setorProducaoId!, unidade: txt(f.unidade),
         precoVenda: num(f.precoVenda) ?? 0, precoCusto: num(f.precoCusto), controlaEstoque: f.controlaEstoque, estoqueMinimo: num(f.estoqueMinimo),
         vendivel: f.vendivel, ativo: f.ativo, ordem: orig?.ordem ?? 0, ncm: txt(f.ncm), cest: txt(f.cest), cfop: txt(f.cfop), csosn: txt(f.csosn),
-        cstPisCofins: txt(f.cstPisCofins), gtin: txt(f.gtin), usuarioId: usuarioId!, pin,
+        cstPisCofins: txt(f.cstPisCofins), gtin: txt(f.gtin),
       })
       onFim({
         tipo: r.avisosFiscais.length ? 'erro' : 'ok',
@@ -112,9 +108,6 @@ export default function EditarProduto({ id, categorias, onFim }: {
         <label>Código de barras (GTIN)<input value={f.gtin} onChange={e => set('gtin', e.target.value)} inputMode="numeric" maxLength={14} /></label>
       </div>
 
-      <div className="grade autorizacao">
-        <SeletorUsuario usuarioId={usuarioId} pin={pin} onUsuario={setUsuarioId} onPin={setPin} somenteGerentes />
-      </div>
       {erro && <p className="erro">{erro}</p>}
       <div className="acoes"><button type="submit">Salvar</button><button type="button" className="sec" onClick={() => onFim()}>Cancelar</button></div>
     </form>

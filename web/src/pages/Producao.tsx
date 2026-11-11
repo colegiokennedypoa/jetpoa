@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
-import { api, hora, type Envio, type Setor } from '../api'
+import { api, hora, P, type Envio, type Setor } from '../api'
+import { useSessao } from '../sessao'
 
 const TIPO = { P: 'Pedido', C: 'Cancelamento', R: 'Reimpressão' } as const
 const SIT: Record<string, [string, string]> = { P: ['Na fila', 'tag pend'], I: ['Impresso', 'tag ok'], E: ['Erro', 'tag erro'] }
 
 export default function Producao() {
+  const { pode } = useSessao()
   const [setores, setSetores] = useState<Setor[]>([])
   const [envios, setEnvios] = useState<Envio[]>([])
   const [soErros, setSoErros] = useState(false)
@@ -25,10 +27,12 @@ export default function Producao() {
 
   return (
     <section>
-      <h3>Impressoras por setor</h3>
-      <div className="setores">
-        {setores.map(s => <SetorCard key={s.id} setor={s} onMsg={setMsg} />)}
-      </div>
+      {pode(P.producaoConfigurar) && <>
+        <h3>Impressoras por setor</h3>
+        <div className="setores">
+          {setores.map(s => <SetorCard key={s.id} setor={s} onMsg={setMsg} />)}
+        </div>
+      </>}
       {msg && <p className={msg.tipo}>{msg.texto}</p>}
 
       <div className="filtros">

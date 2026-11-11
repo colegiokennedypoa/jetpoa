@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  api, brl, gravarLocal, lerLocal,
+  api, brl,
   type Apoio, type ComandaItem, type ComandaResumo, type DescontoManual, type Pagamento, type PedidoFechamento, type Simulacao,
 } from '../api'
+import { useSessao } from '../sessao'
 
 type Props = {
   comanda: ComandaResumo
@@ -12,7 +13,6 @@ type Props = {
 }
 
 const TAXAS: Record<string, string> = { ESTACIONAMENTO: 'Estacionamento', EMBARQUE: 'Embarque', COUVERT: 'Couvert' }
-const CHAVE_OPERADOR = 'jetpoa.operador'
 const r2 = (v: number) => Math.round(v * 100) / 100
 
 export default function FecharConta({ comanda, itens, onFechada, onVoltar }: Props) {
@@ -20,8 +20,7 @@ export default function FecharConta({ comanda, itens, onFechada, onVoltar }: Pro
   const [apoio, setApoio] = useState<Apoio>()
   const [pedido, setPedido] = useState<PedidoFechamento>({ consumoInterno: false, isentarTaxas: [], descontos: [], taxaServicoPct: null })
   const [sim, setSim] = useState<Simulacao>()
-  const [operadorId, setOperadorId] = useState<number | null>(() => Number(lerLocal(CHAVE_OPERADOR)) || null)
-  const [operadorPin, setOperadorPin] = useState('')
+  const { eu } = useSessao()
   const [autorizadorId, setAutorizadorId] = useState<number | null>(null)
   const [autorizadorPin, setAutorizadorPin] = useState('')
   const [pagamentos, setPagamentos] = useState<Pagamento[]>([])
@@ -34,10 +33,10 @@ export default function FecharConta({ comanda, itens, onFechada, onVoltar }: Pro
   // recalcula a cada mudança (o servidor é a fonte da verdade)
   useEffect(() => {
     const t = setTimeout(() => {
-      api.simular(comanda.id, pedido, operadorId).then(s => { setSim(s); setErro(undefined) }).catch(e => setErro(e.message))
+      api.simular(comanda.id, pedido).then(s => { setSim(s); setErro(undefined) }).catch(e => setErro(e.message))
     }, 200)
     return () => clearTimeout(t)
-  }, [comanda.id, pedido, operadorId])
+  }, [comanda.id, pedido])
 
   const calc = sim?.calculo
   const total = calc?.total ?? 0
@@ -46,7 +45,7 @@ export default function FecharConta({ comanda, itens, onFechada, onVoltar }: Pro
   const troco = r2(pagamentos.reduce((s, p) => s + (p.valorRecebido != null ? Math.max(0, p.valorRecebido - p.valor) : 0), 0))
   const taxasNaComanda = [...new Set(ativos.map(i => i.taxaTipo).filter((t): t is string => !!t))]
   const isentasAuto = new Set((calc?.descontos ?? []).filter(d => d.origem === 'CATEGORIA' && d.taxaTipo).map(d => d.taxaTipo))
-  const autorizadores = (apoio?.operadores ?? []).filter(u => u.autorizaDesconto === 'S' && u.id !== operadorId)
+  const autorizadores = (apoio?.autorizadores ?? []).filter(u => u.id !== eu.id)
 
   const setDesc = (k: number, d: Partial<DescontoManual>) =>
     setPedido(p => ({ ...p, descontos: p.descontos.map((x, i) => (i === k ? { ...x, ...d } : x)) }))
@@ -69,16 +68,14 @@ export default function FecharConta({ comanda, itens, onFechada, onVoltar }: Pro
   }
 
   const confirmar = async () => {
-    if (!operadorId) { setErro('Selecione o operador do caixa.'); return }
     setEnviando(true); setErro(undefined)
     try {
       const r = await api.fechar(comanda.id, {
-        pedido, operadorId, operadorPin,
+        pedido,
         autorizadorId: sim?.exigeAutorizacao ? autorizadorId : null,
         autorizadorPin: sim?.exigeAutorizacao ? autorizadorPin : null,
         pagamentos, cpfCnpjNota: cpfNota.trim() || null,
       })
-      gravarLocal(CHAVE_OPERADOR, String(operadorId))
       const nf = r.nfce
       const nota = !nf ? ''
         : nf.situacao === 'AUTORIZADA' ? ` NFC-e ${nf.numero} autorizada.`
@@ -202,15 +199,7 @@ export default function FecharConta({ comanda, itens, onFechada, onVoltar }: Pro
 
       <div className="fech-col">
         <h4>Confirmação</h4>
-        <label className="linha-campo">Operador
-          <select value={operadorId ?? ''} onChange={e => setOperadorId(Number(e.target.value) || null)}>
-            <option value="">Selecione…</option>
-            {apoio?.operadores.map(u => <option key={u.id} value={u.id}>{u.nome} ({u.perfil})</option>)}
-          </select>
-        </label>
-        <label className="linha-campo">PIN do operador
-          <input type="password" inputMode="numeric" autoComplete="off" value={operadorPin} onChange={e => setOperadorPin(e.target.value.replace(/\D/g, ''))} />
-        </label>
+        <p className="obs">Caixa: <b>{eu.nome}</b> ({eu.perfil})</p>
         {sim?.exigeAutorizacao && (
           <div className="autorizacao">
             <b>{calc?.consumoInterno ? 'Consumo interno' : 'Desconto acima do limite'}: autorização do gerente</b>
@@ -223,7 +212,7 @@ export default function FecharConta({ comanda, itens, onFechada, onVoltar }: Pro
           </div>
         )}
         {erro && <p className="erro">{erro}</p>}
-        <button className="enviar" disabled={enviando || !calc || falta !== 0 || !operadorId || operadorPin.length < 4} onClick={confirmar}>
+        <button className="enviar" disabled={enviando || !calc || falta !== 0 || (!!sim?.exigeAutorizacao && (!autorizadorId || autorizadorPin.length < 4))} onClick={confirmar}>
           {enviando ? 'Fechando…' : `Fechar conta · ${brl(total)}`}
         </button>
         <button className="sec" onClick={onVoltar}>Voltar</button>

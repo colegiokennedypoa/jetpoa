@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using JetPoa.Api.Auth;
 using Dapper;
 using JetPoa.Api.Data;
 using JetPoa.Api.Domain;
@@ -47,7 +49,8 @@ public static class ClienteEndpoints
 
     public static void MapClientes(this IEndpointRouteBuilder app)
     {
-        var g = app.MapGroup("/api").WithTags("Clientes");
+        var g = app.MapGroup("/api").WithTags("Clientes").RequireAuthorization(Permissoes.ClientesVer);
+        var gEditar = g.MapGroup("").RequireAuthorization(Permissoes.ClientesEditar);
 
         g.MapGet("/cliente-categorias", async (Db db, CancellationToken ct) =>
         {
@@ -99,7 +102,7 @@ public static class ClienteEndpoints
             return cli is null ? Results.NotFound() : Results.Ok(cli);
         });
 
-        g.MapPost("/clientes", async (Db db, ClienteInput input, CancellationToken ct) =>
+        gEditar.MapPost("/clientes", async (Db db, ClienteInput input, CancellationToken ct) =>
         {
             var erros = Validar(input, out var cpf, out var celular);
             if (erros.Count > 0) return Results.ValidationProblem(erros);
@@ -125,7 +128,7 @@ public static class ClienteEndpoints
             return Results.Created($"/api/clientes/{id}", new { id });
         });
 
-        g.MapPut("/clientes/{id:long}", async (Db db, long id, ClienteInput input, CancellationToken ct) =>
+        gEditar.MapPut("/clientes/{id:long}", async (Db db, long id, ClienteInput input, CancellationToken ct) =>
         {
             var erros = Validar(input, out var cpf, out var celular);
             if (erros.Count > 0) return Results.ValidationProblem(erros);

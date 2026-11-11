@@ -32,7 +32,7 @@ A tela **Implantação** mostra o checklist ao vivo. Este roteiro diz **quando**
    > Start-Service JetPOABistro
    > ```
    > Para publicar sem o script: `cd web; npm run build; cd ..` e depois `dotnet publish src\JetPoa.Api\JetPoa.Api.csproj -c Release -o C:\Projeto\JetPOA\app`.
-2. **Usuários** (tela Usuários): Administrador → Gerentes → Caixas. Cada pessoa cria o próprio PIN.
+2. **Usuários** (tela Usuários): Administrador → Gerentes → Caixas → Garçons/Portaria. Cada um recebe uma senha provisória e troca no primeiro acesso. Gerentes cadastram também um PIN de autorização.
 3. **Impressoras** (tela Produção): conferir o IP de Cozinha, Bar e Garçom, cadastrar o **Caixa** (DANFE) e usar "Imprimir teste" em cada uma.
    - Se a Bematech imprimir caracteres estranhos, colocar a impressora em modo **ESC/POS** (menu da impressora ou utilitário Bematech).
 4. **Contador** (tela Produtos → "Só com pendência fiscal"): completar NCM, CFOP, CSOSN e CST dos produtos pendentes (77 em 11/11).

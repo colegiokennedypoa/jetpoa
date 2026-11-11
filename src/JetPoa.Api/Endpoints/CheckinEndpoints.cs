@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using JetPoa.Api.Auth;
 using System.Data;
 using Dapper;
 using JetPoa.Api.Data;
@@ -58,7 +60,8 @@ public static class CheckinEndpoints
 
     public static void MapCheckin(this IEndpointRouteBuilder app)
     {
-        var ev = app.MapGroup("/api/eventos").WithTags("Check-in / Eventos");
+        var ev = app.MapGroup("/api/eventos").WithTags("Check-in / Eventos").RequireAuthorization(Permissoes.Checkin);
+        var evEditar = ev.MapGroup("").RequireAuthorization(Permissoes.EventoEditar);
 
         ev.MapGet("", async (Db db, CancellationToken ct) =>
         {
@@ -73,12 +76,12 @@ public static class CheckinEndpoints
             return Results.Ok(e);
         });
 
-        ev.MapPost("", async (Db db, EventoInput i, CancellationToken ct) => await SalvarEventoAsync(db, null, i, ct));
-        ev.MapPut("/{id:long}", async (Db db, long id, EventoInput i, CancellationToken ct) => await SalvarEventoAsync(db, id, i, ct));
+        evEditar.MapPost("", async (Db db, EventoInput i, CancellationToken ct) => await SalvarEventoAsync(db, null, i, ct));
+        evEditar.MapPut("/{id:long}", async (Db db, long id, EventoInput i, CancellationToken ct) => await SalvarEventoAsync(db, id, i, ct));
 
-        var g = app.MapGroup("/api").WithTags("Check-in / Eventos");
+        var g = app.MapGroup("/api").WithTags("Check-in / Eventos").RequireAuthorization(Permissoes.Checkin);
 
-        g.MapPost("/checkin", async (Db db, CheckinInput i, CancellationToken ct) =>
+        g.MapPost("/checkin", async (ClaimsPrincipal user, Db db, CheckinInput i, CancellationToken ct) =>
         {
             if (i.Numero <= 0) return Erro("Informe o número da comanda/pulseira.");
             var entrada = (i.EntradaTipo ?? "").Trim().ToUpperInvariant() switch { "T" or "TERRA" => "T", "R" or "RIO" => "R", _ => null };
@@ -108,9 +111,9 @@ public static class CheckinEndpoints
             try
             {
                 await c.ExecuteAsync("""
-                    insert into comanda (id, numero, cliente_id, identificacao, entrada_tipo, area_id, observacao, evento_id)
-                    values (:comandaId, :numero, :clienteId, :identificacao, :entrada, :areaId, :obs, :eventoId)
-                    """, new { comandaId, numero = i.Numero, clienteId, identificacao, entrada, areaId = i.AreaId,
+                    insert into comanda (id, numero, cliente_id, identificacao, entrada_tipo, area_id, observacao, evento_id, aberta_por)
+                    values (:comandaId, :numero, :clienteId, :identificacao, :entrada, :areaId, :obs, :eventoId, :usr)
+                    """, new { comandaId, usr = user.Id(), numero = i.Numero, clienteId, identificacao, entrada, areaId = i.AreaId,
                               obs = string.IsNullOrWhiteSpace(i.Observacao) ? null : i.Observacao.Trim(), eventoId = evento?.Id }, tx);
             }
             catch (OracleException e) when (e.Number == 1)
@@ -129,9 +132,9 @@ public static class CheckinEndpoints
             }
             foreach (var t in taxas)
                 await c.ExecuteAsync("""
-                    insert into comanda_item (comanda_id, produto_id, quantidade, preco_unitario, origem)
-                    values (:comandaId, :ProdutoId, 1, :PrecoVenda, 'CHECKIN')
-                    """, new { comandaId, t.ProdutoId, t.PrecoVenda }, tx);
+                    insert into comanda_item (comanda_id, produto_id, quantidade, preco_unitario, origem, lancado_por)
+                    values (:comandaId, :ProdutoId, 1, :PrecoVenda, 'CHECKIN', :usr)
+                    """, new { comandaId, t.ProdutoId, t.PrecoVenda, usr = user.Id() }, tx);
 
             tx.Commit();
             return Results.Ok(new

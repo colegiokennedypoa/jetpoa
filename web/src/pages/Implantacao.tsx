@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api, type ItemChecklist } from '../api'
-import SeletorUsuario from '../components/SeletorUsuario'
-
 const ICONE: Record<ItemChecklist['status'], [string, string]> = {
   ok: ['OK', 'tag ok'], aviso: ['Atenção', 'tag pend'], erro: ['Pendente', 'tag erro'], manual: ['Manual', 'tag pend'], info: ['Info', 'tag'],
 }
@@ -10,8 +8,6 @@ const ICONE: Record<ItemChecklist['status'], [string, string]> = {
 export default function Implantacao() {
   const [itens, setItens] = useState<ItemChecklist[]>([])
   const [carregando, setCarregando] = useState(false)
-  const [usuarioId, setUsuarioId] = useState<number | null>(null)
-  const [pin, setPin] = useState('')
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [previa, setPrevia] = useState<{ tipo: 'clientes' | 'produtos'; dados: any } | null>(null)
   const [msg, setMsg] = useState<{ tipo: 'ok' | 'erro'; texto: string }>()
@@ -23,9 +19,8 @@ export default function Implantacao() {
   useEffect(() => { carregar(false) }, [carregar])
 
   const rodar = async (tipo: 'clientes' | 'produtos', aplicar: boolean) => {
-    if (!usuarioId) { setMsg({ tipo: 'erro', texto: 'Informe o Administrador e o PIN.' }); return }
     try {
-      const dados = tipo === 'clientes' ? await api.importarClientes(aplicar, usuarioId, pin) : await api.sincronizarProdutos(aplicar, usuarioId, pin)
+      const dados = tipo === 'clientes' ? await api.importarClientes(aplicar) : await api.sincronizarProdutos(aplicar)
       setPrevia({ tipo, dados })
       if (aplicar) { setMsg({ tipo: 'ok', texto: tipo === 'clientes' ? `${dados.novos} clientes importados.` : 'Produtos sincronizados.' }); carregar(false) }
     } catch (e) { setMsg({ tipo: 'erro', texto: (e as Error).message }) }
@@ -60,7 +55,6 @@ export default function Implantacao() {
       <h3>Importações do sistema antigo (Forms)</h3>
       <div className="cartao">
         <p className="vazio">Sempre veja a <b>prévia</b> antes de aplicar. Nada é alterado no Forms; só o sistema novo é gravado.</p>
-        <div className="grade"><SeletorUsuario usuarioId={usuarioId} pin={pin} onUsuario={setUsuarioId} onPin={setPin} /></div>
         <div className="acoes">
           <button className="sec" onClick={() => rodar('clientes', false)}>Prévia: importar clientes</button>
           <button className="sec" onClick={() => rodar('produtos', false)}>Prévia: sincronizar produtos</button>

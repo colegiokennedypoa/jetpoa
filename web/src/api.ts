@@ -65,11 +65,17 @@ export type ComandaResumo = {
 export type Usuario = {
   id: number; nome: string; login: string; perfilId: number; perfil: string
   limiteDescontoPct: number; autorizaDesconto: string; ativo: string
+  temPin: string; precisaTrocarSenha: string; ultimoLogin: string | null
+}
+/** Usuário logado (GET /api/auth/eu). */
+export type Eu = {
+  id: number; nome: string; login: string; perfil: string; limiteDescontoPct: number
+  autorizaDesconto: boolean; precisaTrocarSenha: boolean; permissoes: string[]
 }
 export type Perfil = { id: number; nome: string; limiteDescontoPct: number; autorizaDesconto: string }
 export type FormaPagamento = { id: number; codigo: string; nome: string; tpagNfce: string; aceitaTroco: string }
 export type MotivoDesconto = { id: number; nome: string; exigeObservacao: string }
-export type Apoio = { formas: FormaPagamento[]; motivos: MotivoDesconto[]; operadores: Usuario[]; taxaServicoPadraoPct: number }
+export type Apoio = { formas: FormaPagamento[]; motivos: MotivoDesconto[]; autorizadores: Usuario[]; taxaServicoPadraoPct: number }
 
 export type DescontoManual = {
   escopo: 'TOTAL' | 'ITEM' | 'CATEGORIA'; itemId: number | null; categoriaId: number | null
@@ -142,7 +148,7 @@ export type ProdutoInput = {
   nome: string; descricao: string | null; categoriaId: number; tipo: 'P' | 'K' | 'S'; setorProducaoId: number; unidade: string | null
   precoVenda: number; precoCusto: number | null; controlaEstoque: boolean; estoqueMinimo: number | null; vendivel: boolean; ativo: boolean
   ordem: number | null; ncm: string | null; cest: string | null; cfop: string | null; csosn: string | null; cstPisCofins: string | null
-  gtin: string | null; usuarioId: number; pin: string
+  gtin: string | null
 }
 export type ItemChecklist = { grupo: string; titulo: string; status: 'ok' | 'aviso' | 'erro' | 'manual' | 'info'; detalhe: string }
 
@@ -163,8 +169,16 @@ export type Envio = {
 
 export type ItemCarrinho = { produtoId: number; nome: string; preco: number; quantidade: number; observacao: string }
 
+/** Disparado quando a sessão expira/cai (401): o App volta para a tela de login. */
+export const EVENTO_SESSAO_EXPIRADA = 'jetpoa:sessao-expirada'
+
 async function req<T>(url: string, init?: RequestInit): Promise<T> {
-  const r = await fetch(url, { headers: { 'Content-Type': 'application/json' }, ...init })
+  const r = await fetch(url, { headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', ...init })
+  if (r.status === 401 && !url.startsWith('/api/auth/login')) {
+    window.dispatchEvent(new Event(EVENTO_SESSAO_EXPIRADA))
+    throw new Error('Sessão expirada. Entre novamente.')
+  }
+  if (r.status === 403) throw new Error('Seu perfil não tem permissão para esta ação.')
   if (!r.ok) {
     let msg = `Erro ${r.status}`
     try {
@@ -183,6 +197,17 @@ const qs = (o: Record<string, string | number | boolean | undefined | null>) =>
 
 export const api = {
   health: () => req<{ status: string; banco: string; agora: string }>('/api/health'),
+
+  primeiroAcesso: () => req<{ semUsuarios: boolean }>('/api/auth/primeiro-acesso'),
+  login: (login: string, senha: string) => req<Eu>('/api/auth/login', { method: 'POST', body: JSON.stringify({ login, senha }) }),
+  sair: () => req<void>('/api/auth/sair', { method: 'POST' }),
+  /** Usuário logado, ou null se não há sessão. */
+  eu: async (): Promise<Eu | null> => {
+    const r = await fetch('/api/auth/eu', { credentials: 'same-origin' })
+    return r.ok ? r.json() : null
+  },
+  trocarSenha: (atual: string, nova: string) => req<Eu>('/api/auth/trocar-senha', { method: 'POST', body: JSON.stringify({ atual, nova }) }),
+
   categorias: () => req<Categoria[]>('/api/categorias'),
   produtos: (p: { busca?: string; categoriaId?: number; pendenciaFiscal?: boolean; somenteAtivos?: boolean }) =>
     req<ProdutoResumo[]>(`/api/produtos?${qs(p)}`),
@@ -230,15 +255,16 @@ export const api = {
 
   perfis: () => req<Perfil[]>('/api/perfis'),
   usuarios: () => req<Usuario[]>('/api/usuarios'),
-  salvarUsuario: (id: number | null, u: { nome: string; login: string; perfilId: number; pin: string | null; ativo: boolean; admin: { usuarioId: number; pin: string } | null }) =>
+  autorizadores: () => req<Usuario[]>('/api/usuarios/autorizadores'),
+  salvarUsuario: (id: number | null, u: { nome: string; login: string; perfilId: number; senha: string | null; pin: string | null; ativo: boolean }) =>
     id ? req<void>(`/api/usuarios/${id}`, { method: 'PUT', body: JSON.stringify(u) })
        : req<{ id: number }>('/api/usuarios', { method: 'POST', body: JSON.stringify(u) }),
 
   apoioFechamento: () => req<Apoio>('/api/fechamento/apoio'),
-  simular: (id: number, pedido: PedidoFechamento, operadorId: number | null) =>
-    req<Simulacao>(`/api/comandas/${id}/fechamento/simular`, { method: 'POST', body: JSON.stringify({ pedido, operadorId }) }),
+  simular: (id: number, pedido: PedidoFechamento) =>
+    req<Simulacao>(`/api/comandas/${id}/fechamento/simular`, { method: 'POST', body: JSON.stringify({ pedido }) }),
   fechar: (id: number, f: {
-    pedido: PedidoFechamento; operadorId: number; operadorPin: string; autorizadorId: number | null; autorizadorPin: string | null
+    pedido: PedidoFechamento; autorizadorId: number | null; autorizadorPin: string | null
     pagamentos: Pagamento[]; cpfCnpjNota: string | null
   }) => req<{ id: number; total: number; troco: number; descontoTotal: number; nfce: NfceResultado | null; erroDanfe: string | null }>(
     `/api/comandas/${id}/fechar`, { method: 'POST', body: JSON.stringify(f) }),
@@ -258,9 +284,9 @@ export const api = {
   estoque: (abaixoMinimo = false) => req<ItemEstoque[]>(`/api/estoque?abaixoMinimo=${abaixoMinimo}`),
   movimentosEstoque: (produtoId: number | null, dias: number) =>
     req<MovimentoEstoque[]>(`/api/estoque/movimentos?dias=${dias}${produtoId ? `&produtoId=${produtoId}` : ''}`),
-  movimentarEstoque: (m: { produtoId: number; tipo: 'E' | 'P' | 'A'; quantidade: number; custoUnitario: number | null; observacao: string | null; usuarioId: number; pin: string }) =>
+  movimentarEstoque: (m: { produtoId: number; tipo: 'E' | 'P' | 'A'; quantidade: number; custoUnitario: number | null; observacao: string | null }) =>
     req<{ saldo: number }>('/api/estoque/movimento', { method: 'POST', body: JSON.stringify(m) }),
-  inventario: (i: { itens: { produtoId: number; contado: number }[]; observacao: string | null; usuarioId: number; pin: string }) =>
+  inventario: (i: { itens: { produtoId: number; contado: number }[]; observacao: string | null }) =>
     req<{ ajustados: number }>('/api/estoque/inventario', { method: 'POST', body: JSON.stringify(i) }),
 
   produto: (id: number) => req<ProdutoCompleto>(`/api/produtos/${id}`),
@@ -269,9 +295,9 @@ export const api = {
 
   checklist: (sefaz: boolean) => req<ItemChecklist[]>(`/api/implantacao/checklist?sefaz=${sefaz}`),
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  importarClientes: (aplicar: boolean, usuarioId: number, pin: string) => req<any>(`/api/implantacao/clientes/importar?aplicar=${aplicar}`, { method: 'POST', body: JSON.stringify({ usuarioId, pin }) }),
+  importarClientes: (aplicar: boolean) => req<any>(`/api/implantacao/clientes/importar?aplicar=${aplicar}`, { method: 'POST' }),
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  sincronizarProdutos: (aplicar: boolean, usuarioId: number, pin: string) => req<any>(`/api/implantacao/produtos/sincronizar?aplicar=${aplicar}`, { method: 'POST', body: JSON.stringify({ usuarioId, pin }) }),
+  sincronizarProdutos: (aplicar: boolean) => req<any>(`/api/implantacao/produtos/sincronizar?aplicar=${aplicar}`, { method: 'POST' }),
 
   relatorioVendas: (de: string, ate: string) => req<RelatorioVendas>(`/api/relatorios/vendas?de=${de}&ate=${ate}`),
 
@@ -282,13 +308,23 @@ export const api = {
   emitirNota: (comandaId: number) => req<NfceResultado>(`/api/fiscal/comandas/${comandaId}/emitir`, { method: 'POST' }),
   reenviarNota: (id: number) => req<NfceResultado>(`/api/fiscal/notas/${id}/reenviar`, { method: 'POST' }),
   imprimirNota: (id: number) => req<{ ok: boolean }>(`/api/fiscal/notas/${id}/imprimir`, { method: 'POST' }),
-  cancelarNota: (id: number, justificativa: string, usuarioId: number, pin: string) =>
-    req<NfceResultado>(`/api/fiscal/notas/${id}/cancelar`, { method: 'POST', body: JSON.stringify({ justificativa, usuarioId, pin }) }),
-  inutilizar: (i: { serie: number | null; inicial: number; final: number; justificativa: string; usuarioId: number; pin: string }) =>
+  cancelarNota: (id: number, justificativa: string) =>
+    req<NfceResultado>(`/api/fiscal/notas/${id}/cancelar`, { method: 'POST', body: JSON.stringify({ justificativa }) }),
+  inutilizar: (i: { serie: number | null; inicial: number; final: number; justificativa: string }) =>
     req<NfceResultado>('/api/fiscal/inutilizar', { method: 'POST', body: JSON.stringify(i) }),
-  cancelarComanda: (id: number, motivo: string, usuarioId: number, pin: string) =>
-    req<void>(`/api/comandas/${id}/cancelar`, { method: 'POST', body: JSON.stringify({ motivo, usuarioId, pin }) }),
+  cancelarComanda: (id: number, motivo: string, autorizadorId: number | null, autorizadorPin: string | null) =>
+    req<void>(`/api/comandas/${id}/cancelar`, { method: 'POST', body: JSON.stringify({ motivo, autorizadorId, autorizadorPin }) }),
 }
+
+/** Permissões (iguais a JetPoa.Api.Auth.Permissoes). */
+export const P = {
+  comandaVer: 'comanda.ver', comandaAbrir: 'comanda.abrir', comandaLancar: 'comanda.lancar', comandaFechar: 'comanda.fechar',
+  comandaCancelar: 'comanda.cancelar', itemCancelar: 'item.cancelar', checkin: 'checkin', eventoEditar: 'evento.editar',
+  clientesVer: 'clientes.ver', clientesEditar: 'clientes.editar', produtosVer: 'produtos.ver', produtosEditar: 'produtos.editar',
+  producaoVer: 'producao.ver', producaoConfigurar: 'producao.configurar', fiscalVer: 'fiscal.ver', fiscalEmitir: 'fiscal.emitir',
+  fiscalCancelar: 'fiscal.cancelar', estoqueVer: 'estoque.ver', estoqueMovimentar: 'estoque.movimentar', estoqueAjustar: 'estoque.ajustar',
+  relatorios: 'relatorios', usuarios: 'usuarios.gerenciar', implantacao: 'implantacao',
+} as const
 
 export const lerLocal = (k: string): string | null => { try { return localStorage.getItem(k) } catch { return null } }
 export const gravarLocal = (k: string, v: string) => { try { localStorage.setItem(k, v) } catch { /* sem storage */ } }

@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using JetPoa.Api.Auth;
 using System.Text;
 using Dapper;
 using JetPoa.Api.Data;
@@ -40,13 +42,14 @@ public static class FiscalEndpoints
         public string? UltimoMotivo { get; set; }
     }
 
-    public sealed record AutorizacaoInput(long UsuarioId, string Pin);
-    public sealed record CancelarNotaInput(string Justificativa, long UsuarioId, string Pin);
-    public sealed record InutilizarInput(int? Serie, int Inicial, int Final, string Justificativa, long UsuarioId, string Pin);
+    public sealed record CancelarNotaInput(string Justificativa);
+    public sealed record InutilizarInput(int? Serie, int Inicial, int Final, string Justificativa);
 
     public static void MapFiscal(this IEndpointRouteBuilder app)
     {
-        var g = app.MapGroup("/api/fiscal").WithTags("Fiscal (NFC-e)");
+        var g = app.MapGroup("/api/fiscal").WithTags("Fiscal (NFC-e)").RequireAuthorization(Permissoes.FiscalVer);
+        var gEmitir = g.MapGroup("").RequireAuthorization(Permissoes.FiscalEmitir);
+        var gCancelar = g.MapGroup("").RequireAuthorization(Permissoes.FiscalCancelar);
 
         g.MapGet("/status", (IOptionsMonitor<NfceOptions> o, NfceService nfce) =>
         {
@@ -115,41 +118,34 @@ public static class FiscalEndpoints
                 """);
         });
 
-        g.MapPost("/comandas/{id:long}/emitir", async (NfceService nfce, Db db, long id, CancellationToken ct) =>
+        gEmitir.MapPost("/comandas/{id:long}/emitir", async (NfceService nfce, Db db, long id, CancellationToken ct) =>
         {
             var r = await nfce.EmitirAsync(id, ct);
             if (r.Nova && r.Id is not null && r.Situacao is "AUTORIZADA" or "CONTINGENCIA") await ImprimirDanfeAsync(db, nfce, r.Id.Value, ct);
             return Results.Ok(r);
         });
 
-        g.MapPost("/notas/{id:long}/reenviar", async (NfceService nfce, Db db, long id, CancellationToken ct) =>
+        gEmitir.MapPost("/notas/{id:long}/reenviar", async (NfceService nfce, Db db, long id, CancellationToken ct) =>
         {
             var r = await nfce.ReenviarAsync(id, ct);
             if (r.Situacao == "AUTORIZADA") await ImprimirDanfeAsync(db, nfce, id, ct);
             return Results.Ok(r);
         });
 
-        g.MapPost("/notas/{id:long}/cancelar", async (NfceService nfce, Db db, long id, CancelarNotaInput i, CancellationToken ct) =>
+        gCancelar.MapPost("/notas/{id:long}/cancelar", async (ClaimsPrincipal user, NfceService nfce, Db db, long id, CancelarNotaInput i, CancellationToken ct) =>
         {
             var just = i.Justificativa?.Trim() ?? "";
             if (just.Length is < 15 or > 255) return Results.UnprocessableEntity(new { erro = "Justificativa deve ter de 15 a 255 caracteres." });
-            using (var c = await db.OpenAsync(ct))
-            {
-                var u = await UsuarioEndpoints.AutenticarAsync(c, i.UsuarioId, i.Pin);
-                if (u is null || u.AutorizaDesconto != "S") return Results.UnprocessableEntity(new { erro = "Cancelamento exige PIN de gerente/administrador." });
-            }
-            return Results.Ok(await nfce.CancelarAsync(id, just, i.UsuarioId, ct));
+            return Results.Ok(await nfce.CancelarAsync(id, just, user.Id(), ct));
         });
 
-        g.MapPost("/inutilizar", async (NfceService nfce, Db db, IOptionsMonitor<NfceOptions> o, InutilizarInput i, CancellationToken ct) =>
+        gCancelar.MapPost("/inutilizar", async (ClaimsPrincipal user, NfceService nfce, Db db, IOptionsMonitor<NfceOptions> o, InutilizarInput i, CancellationToken ct) =>
         {
             var just = i.Justificativa?.Trim() ?? "";
             if (just.Length is < 15 or > 255) return Results.UnprocessableEntity(new { erro = "Justificativa deve ter de 15 a 255 caracteres." });
             if (i.Inicial <= 0 || i.Final < i.Inicial) return Results.UnprocessableEntity(new { erro = "Faixa de números inválida." });
             using (var c = await db.OpenAsync(ct))
             {
-                var u = await UsuarioEndpoints.AutenticarAsync(c, i.UsuarioId, i.Pin);
-                if (u is null || u.AutorizaDesconto != "S") return Results.UnprocessableEntity(new { erro = "Inutilização exige PIN de gerente/administrador." });
                 var serie = i.Serie ?? o.CurrentValue.Serie;
                 var usados = await c.ExecuteScalarAsync<int>("""
                     select count(*) from nfce where serie = :serie and ambiente = :amb and numero between :ini and :fim
@@ -166,7 +162,7 @@ public static class FiscalEndpoints
                     if (legado > 0) return Results.UnprocessableEntity(new { erro = $"A faixa contém {legado} nota(s) autorizada(s) pelo sistema antigo." });
                 }
             }
-            return Results.Ok(await nfce.InutilizarAsync(i.Serie ?? o.CurrentValue.Serie, i.Inicial, i.Final, just, i.UsuarioId, ct));
+            return Results.Ok(await nfce.InutilizarAsync(i.Serie ?? o.CurrentValue.Serie, i.Inicial, i.Final, just, user.Id(), ct));
         });
 
         g.MapGet("/notas/{id:long}/danfe", async (NfceService nfce, Db db, long id, CancellationToken ct) =>
@@ -186,7 +182,7 @@ public static class FiscalEndpoints
             return Results.File(Encoding.UTF8.GetBytes(xml), "application/xml", $"{n.Chave}-nfce.xml");
         });
 
-        g.MapPost("/notas/{id:long}/imprimir", async (NfceService nfce, Db db, long id, CancellationToken ct) =>
+        gEmitir.MapPost("/notas/{id:long}/imprimir", async (NfceService nfce, Db db, long id, CancellationToken ct) =>
         {
             var erro = await ImprimirDanfeAsync(db, nfce, id, ct);
             return erro is null ? Results.Ok(new { ok = true }) : Results.UnprocessableEntity(new { erro });

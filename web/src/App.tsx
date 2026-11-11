@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'react'
-import { api } from './api'
+import { useEffect, useMemo, useState } from 'react'
+import { api, EVENTO_SESSAO_EXPIRADA, P, type Eu } from './api'
+import { SessaoContext, criarSessao } from './sessao'
+import Login, { TrocarSenha } from './pages/Login'
 import Comandas from './pages/Comandas'
 import Garcom from './pages/Garcom'
 import Producao from './pages/Producao'
@@ -13,63 +15,88 @@ import Relatorios from './pages/Relatorios'
 import Implantacao from './pages/Implantacao'
 import './App.css'
 
+/** Abas e a permissão necessária para ver cada uma. */
 const ABAS = {
-  checkin: 'Check-in',
-  comandas: 'Comandas',
-  garcom: 'Garçom',
-  producao: 'Produção',
-  fiscal: 'Fiscal',
-  estoque: 'Estoque',
-  relatorios: 'Relatórios',
-  clientes: 'Clientes',
-  produtos: 'Produtos',
-  usuarios: 'Usuários',
-  implantacao: 'Implantação',
+  checkin: { nome: 'Check-in', perm: P.checkin },
+  comandas: { nome: 'Comandas', perm: P.comandaAbrir },
+  garcom: { nome: 'Garçom', perm: P.comandaLancar },
+  producao: { nome: 'Produção', perm: P.producaoVer },
+  fiscal: { nome: 'Fiscal', perm: P.fiscalVer },
+  estoque: { nome: 'Estoque', perm: P.estoqueVer },
+  relatorios: { nome: 'Relatórios', perm: P.relatorios },
+  clientes: { nome: 'Clientes', perm: P.clientesVer },
+  produtos: { nome: 'Produtos', perm: P.produtosEditar },
+  usuarios: { nome: 'Usuários', perm: P.usuarios },
+  implantacao: { nome: 'Implantação', perm: P.implantacao },
 } as const
 type Aba = keyof typeof ABAS
 
-function abaInicial(): Aba {
-  const h = window.location.hash.replace('#', '')
-  return h in ABAS ? (h as Aba) : 'comandas'
-}
+const hashAba = () => window.location.hash.replace('#', '')
 
 export default function App() {
-  const [aba, setAba] = useState<Aba>(abaInicial)
-  const [banco, setBanco] = useState<string>('verificando…')
+  const [eu, setEu] = useState<Eu | null | undefined>(undefined)   // undefined = verificando
+  const [aviso, setAviso] = useState<string>()
+  const [trocandoSenha, setTrocandoSenha] = useState(false)
+  const [hash, setHash] = useState(hashAba)
+  const [banco, setBanco] = useState('verificando…')
 
   useEffect(() => {
+    api.eu().then(setEu).catch(() => setEu(null))
     api.health().then(h => setBanco(`Oracle ${h.banco}`)).catch(() => setBanco('sem conexão'))
-    const onHash = () => setAba(abaInicial())
+    const onHash = () => setHash(hashAba())
+    const onExpirou = () => { setEu(null); setAviso('Sua sessão terminou. Entre novamente.') }
     window.addEventListener('hashchange', onHash)
-    return () => window.removeEventListener('hashchange', onHash)
+    window.addEventListener(EVENTO_SESSAO_EXPIRADA, onExpirou)
+    return () => { window.removeEventListener('hashchange', onHash); window.removeEventListener(EVENTO_SESSAO_EXPIRADA, onExpirou) }
   }, [])
 
-  const ir = (a: Aba) => { setAba(a); window.location.hash = a }
+  const sessao = useMemo(() => (eu ? criarSessao(eu) : null), [eu])
+  const abas = useMemo(() => (Object.keys(ABAS) as Aba[]).filter(a => sessao?.pode(ABAS[a].perm)), [sessao])
+
+  if (eu === undefined) return <div className="login-fundo"><p>Carregando…</p></div>
+  if (!eu || !sessao) return <Login aviso={aviso} onEntrou={u => { setAviso(undefined); setEu(u) }} />
+
+  const sair = async () => { try { await api.sair() } catch { /* já saiu */ } setEu(null); setAviso(undefined) }
+
+  if (eu.precisaTrocarSenha || trocandoSenha)
+    return <TrocarSenha obrigatoria={eu.precisaTrocarSenha} onTrocou={u => { setTrocandoSenha(false); setEu(u) }}
+      onCancelar={eu.precisaTrocarSenha ? sair : () => setTrocandoSenha(false)} />
+
+  const aba: Aba | undefined = abas.includes(hash as Aba) ? (hash as Aba)
+    : abas.includes('comandas') ? 'comandas' : abas.includes('garcom') ? 'garcom' : abas[0]
+  const ir = (a: Aba) => { window.location.hash = a; setHash(a) }
 
   return (
-    <div className="app">
-      <header className="topo">
-        <strong>JetPOA · Bistrô</strong>
-        <nav>
-          {(Object.keys(ABAS) as Aba[]).map(a => (
-            <button key={a} className={aba === a ? 'ativo' : ''} onClick={() => ir(a)}>{ABAS[a]}</button>
-          ))}
-        </nav>
-        <span className="status">{banco}</span>
-      </header>
-      <main>
-        {aba === 'checkin' && <Checkin />}
-        {aba === 'estoque' && <Estoque />}
-        {aba === 'relatorios' && <Relatorios />}
-        {aba === 'comandas' && <Comandas />}
-        {aba === 'garcom' && <Garcom />}
-        {aba === 'producao' && <Producao />}
-        {aba === 'fiscal' && <Fiscal />}
-        {aba === 'clientes' && <Clientes />}
-        {aba === 'produtos' && <Produtos />}
-        {aba === 'usuarios' && <Usuarios />}
-        {aba === 'implantacao' && <Implantacao />}
-      </main>
-    </div>
+    <SessaoContext.Provider value={sessao}>
+      <div className="app">
+        <header className="topo">
+          <strong>JetPOA · Bistrô</strong>
+          <nav>
+            {abas.map(a => (
+              <button key={a} className={aba === a ? 'ativo' : ''} onClick={() => ir(a)}>{ABAS[a].nome}</button>
+            ))}
+          </nav>
+          <span className="usuario-logado" title={`${eu.login} · ${banco}`}>
+            {eu.nome} <small>({eu.perfil})</small>
+            <button onClick={() => setTrocandoSenha(true)}>Senha</button>
+            <button onClick={sair}>Sair</button>
+          </span>
+        </header>
+        <main>
+          {!aba && <p className="vazio">Seu perfil não tem acesso a nenhuma tela. Fale com o gerente.</p>}
+          {aba === 'checkin' && <Checkin />}
+          {aba === 'estoque' && <Estoque />}
+          {aba === 'relatorios' && <Relatorios />}
+          {aba === 'comandas' && <Comandas />}
+          {aba === 'garcom' && <Garcom />}
+          {aba === 'producao' && <Producao />}
+          {aba === 'fiscal' && <Fiscal />}
+          {aba === 'clientes' && <Clientes />}
+          {aba === 'produtos' && <Produtos />}
+          {aba === 'usuarios' && <Usuarios />}
+          {aba === 'implantacao' && <Implantacao />}
+        </main>
+      </div>
+    </SessaoContext.Provider>
   )
 }

@@ -9,6 +9,21 @@
 .topo nav button { background: transparent; color: var(--text); border-color: transparent; }
 .topo nav button.ativo { background: var(--primary); color: var(--primary-text); }
 .topo .status { margin-left: auto; color: var(--muted); font-size: 0.85rem; }
+.usuario-logado { margin-left: auto; display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; white-space: nowrap; }
+.usuario-logado small { color: var(--muted); }
+.usuario-logado button { padding: 0.25em 0.7em; font-size: 0.85rem; }
+
+/* Login */
+.login-fundo { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px; background: var(--bg); }
+.login-caixa {
+  width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 0.8rem;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1.5rem;
+}
+.login-caixa h1 { margin: 0 0 0.3rem; font-size: 1.3rem; }
+.login-caixa label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.85rem; color: var(--muted); }
+.login-caixa input { font-size: 1rem; padding: 0.55em 0.6em; }
+.login-caixa .dica { margin: 0; color: var(--muted); font-size: 0.9rem; }
+.login-caixa .msg { padding: 0.5em 0.7em; border-radius: 6px; background: #fde4e1; }
 
 main { padding: 1rem; }
 

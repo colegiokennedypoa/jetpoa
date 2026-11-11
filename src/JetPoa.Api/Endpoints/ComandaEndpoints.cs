@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using JetPoa.Api.Auth;
 using System.Data;
 using Dapper;
 using JetPoa.Api.Data;
@@ -95,7 +97,10 @@ public static class ComandaEndpoints
 
     public static void MapComandas(this IEndpointRouteBuilder app)
     {
-        var g = app.MapGroup("/api/comandas").WithTags("Comandas");
+        var g = app.MapGroup("/api/comandas").WithTags("Comandas").RequireAuthorization(Permissoes.ComandaVer);
+        var gAbrir = g.MapGroup("").RequireAuthorization(Permissoes.ComandaAbrir);
+        var gLancar = g.MapGroup("").RequireAuthorization(Permissoes.ComandaLancar);
+        var gCancelarItem = g.MapGroup("").RequireAuthorization(Permissoes.ItemCancelar);
 
         g.MapGet("", async (Db db, string? situacao, CancellationToken ct) =>
         {
@@ -140,7 +145,7 @@ public static class ComandaEndpoints
                 : Results.Ok(com);
         });
 
-        g.MapPost("", async (Db db, AbrirComandaInput i, CancellationToken ct) =>
+        gAbrir.MapPost("", async (ClaimsPrincipal user, Db db, AbrirComandaInput i, CancellationToken ct) =>
         {
             if (i.Numero <= 0) return Erro("Informe o número da comanda.");
             var entrada = NormalizarEntrada(i.EntradaTipo);
@@ -156,12 +161,12 @@ public static class ComandaEndpoints
             try
             {
                 await c.ExecuteAsync("""
-                    insert into comanda (id, numero, cliente_id, identificacao, entrada_tipo, area_id, observacao)
-                    values (:id, :numero, :cliente_id, :identificacao, :entrada, :area_id, :observacao)
+                    insert into comanda (id, numero, cliente_id, identificacao, entrada_tipo, area_id, observacao, aberta_por)
+                    values (:id, :numero, :cliente_id, :identificacao, :entrada, :area_id, :observacao, :usr)
                     """, new
                 {
                     id, numero = i.Numero, cliente_id = i.ClienteId, identificacao = Limpo(i.Identificacao),
-                    entrada, area_id = i.AreaId, observacao = Limpo(i.Observacao)
+                    entrada, area_id = i.AreaId, observacao = Limpo(i.Observacao), usr = user.Id()
                 });
             }
             catch (OracleException e) when (e.Number == 1)
@@ -175,7 +180,7 @@ public static class ComandaEndpoints
             return Results.Created($"/api/comandas/{id}", new { id });
         });
 
-        g.MapPatch("/{id:long}", async (Db db, long id, AlterarComandaInput i, CancellationToken ct) =>
+        gAbrir.MapPatch("/{id:long}", async (Db db, long id, AlterarComandaInput i, CancellationToken ct) =>
         {
             var entrada = i.EntradaTipo is null ? null : NormalizarEntrada(i.EntradaTipo);
             if (i.EntradaTipo is not null && entrada is null) return Erro("Entrada deve ser T (Terra) ou R (Rio).");
@@ -199,7 +204,7 @@ public static class ComandaEndpoints
         });
 
         // Vincula cliente: comanda aberta (troca) ou comanda já fechada que ficou sem cliente (regularização)
-        g.MapPost("/{id:long}/cliente", async (Db db, long id, VincularClienteInput i, CancellationToken ct) =>
+        gAbrir.MapPost("/{id:long}/cliente", async (ClaimsPrincipal user, Db db, long id, VincularClienteInput i, CancellationToken ct) =>
         {
             using var c = await db.OpenAsync(ct);
             if (await c.ExecuteScalarAsync<string?>("select ativo from cliente where id = :cid", new { cid = i.ClienteId }) != "S")
@@ -210,14 +215,14 @@ public static class ComandaEndpoints
                 """, new { id, cid = i.ClienteId });
             if (n == 0) return Erro("Comanda fechada já tem cliente: não pode ser alterada.");
             await c.ExecuteAsync("""
-                insert into auditoria (entidade, entidade_id, acao, detalhe)
-                values ('COMANDA', :eid, 'VINCULAR_CLIENTE', :det)
-                """, new { eid = id.ToString(), det = $"{{\"clienteId\":{i.ClienteId}}}" });
+                insert into auditoria (usuario_id, entidade, entidade_id, acao, detalhe)
+                values (:usr, 'COMANDA', :eid, 'VINCULAR_CLIENTE', :det)
+                """, new { usr = user.Id(), eid = id.ToString(), det = $"{{\"clienteId\":{i.ClienteId}}}" });
             return Results.NoContent();
         });
 
         // Lança itens e gera um envio de produção por setor que imprime
-        g.MapPost("/{id:long}/itens", async (Db db, ImpressaoProducao impressao, long id, LancarInput input, CancellationToken ct) =>
+        gLancar.MapPost("/{id:long}/itens", async (ClaimsPrincipal user, Db db, ImpressaoProducao impressao, long id, LancarInput input, CancellationToken ct) =>
         {
             var itens = input.Itens?.Where(x => x.Quantidade > 0).ToList() ?? [];
             if (itens.Count == 0) return Erro("Nenhum item para lançar.");
@@ -276,10 +281,11 @@ public static class ComandaEndpoints
             {
                 var p = produtos[x.ProdutoId];
                 await c.ExecuteAsync("""
-                    insert into comanda_item (comanda_id, produto_id, quantidade, preco_unitario, observacao, garcom_id, envio_id, origem)
-                    values (:id, :produto_id, :quantidade, :preco, :observacao, :garcom_id, :envio_id, :origem)
+                    insert into comanda_item (comanda_id, produto_id, quantidade, preco_unitario, observacao, garcom_id, envio_id, origem, lancado_por)
+                    values (:id, :produto_id, :quantidade, :preco, :observacao, :garcom_id, :envio_id, :origem, :usr)
                     """, new
                 {
+                    usr = user.Id(),
                     id, produto_id = p.Id, quantidade = x.Quantidade, preco = p.PrecoVenda,
                     observacao = Limpo(x.Observacao), garcom_id = input.GarcomId,
                     envio_id = envioPorSetor.TryGetValue(p.SetorProducaoId, out var e) ? e : (long?)null,
@@ -293,7 +299,7 @@ public static class ComandaEndpoints
         });
 
         // Cancela um item; se já tinha ido para produção, imprime aviso de cancelamento no setor
-        g.MapPost("/{id:long}/itens/{itemId:long}/cancelar", async (Db db, ImpressaoProducao impressao, long id, long itemId, CancelarItemInput input, CancellationToken ct) =>
+        gCancelarItem.MapPost("/{id:long}/itens/{itemId:long}/cancelar", async (ClaimsPrincipal user, Db db, ImpressaoProducao impressao, long id, long itemId, CancelarItemInput input, CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(input.Motivo) || input.Motivo.Trim().Length < 3)
                 return Erro("Informe o motivo do cancelamento.");
@@ -324,14 +330,15 @@ public static class ComandaEndpoints
 
             await c.ExecuteAsync("""
                 update comanda_item
-                   set situacao = 'C', cancelado_em = sysdate, motivo_cancelamento = :motivo, envio_cancelamento_id = :envioCanc
+                   set situacao = 'C', cancelado_em = sysdate, motivo_cancelamento = :motivo, envio_cancelamento_id = :envioCanc,
+                       cancelado_por = :usr
                  where id = :itemId
-                """, new { itemId, motivo = input.Motivo.Trim(), envioCanc }, tx);
+                """, new { itemId, motivo = input.Motivo.Trim(), envioCanc, usr = user.Id() }, tx);
 
             await c.ExecuteAsync("""
                 insert into auditoria (usuario_id, entidade, entidade_id, acao, detalhe)
-                values (null, 'COMANDA_ITEM', :itemId, 'CANCELAMENTO', :detalhe)
-                """, new { itemId = itemId.ToString(), detalhe = $"{{\"comanda\":{id},\"motivo\":\"{input.Motivo.Trim().Replace("\"", "'")}\"}}" }, tx);
+                values (:usr, 'COMANDA_ITEM', :itemId, 'CANCELAMENTO', :detalhe)
+                """, new { usr = user.Id(), itemId = itemId.ToString(), detalhe = $"{{\"comanda\":{id},\"motivo\":\"{input.Motivo.Trim().Replace("\"", "'")}\"}}" }, tx);
 
             tx.Commit();
             if (envioCanc is not null) impressao.Notificar();
