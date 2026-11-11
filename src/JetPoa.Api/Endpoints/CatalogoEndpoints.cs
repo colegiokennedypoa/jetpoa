@@ -40,7 +40,7 @@ public static class CatalogoEndpoints
         public string? Cfop { get; set; }
         public string? Csosn { get; set; }
         public string? CstPisCofins { get; set; }
-        /// <summary>S quando os dados fiscais mínimos para NFC-e estão preenchidos.</summary>
+        /// <summary>S dados fiscais completos · N pendente · X serviço/taxa (fora da NFC-e).</summary>
         public string FiscalOk { get; set; } = "N";
     }
 
@@ -90,7 +90,8 @@ public static class CatalogoEndpoints
                 select p.id, p.nome, p.tipo, p.preco_venda, p.estoque_atual, p.estoque_minimo, p.ativo,
                        p.categoria_id, c.nome categoria, s.codigo setor,
                        p.ncm, p.cfop, p.csosn, p.cst_pis_cofins,
-                       case when p.ncm is not null and p.cfop is not null and p.csosn is not null
+                       case when p.tipo = 'S' or p.taxa_tipo is not null then 'X'   -- serviço/taxa: fora da NFC-e
+                            when p.ncm is not null and p.cfop is not null and p.csosn is not null
                                  and p.cst_pis_cofins is not null then 'S' else 'N' end fiscal_ok
                   from produto p
                   join categoria c on c.id = p.categoria_id
@@ -99,7 +100,8 @@ public static class CatalogoEndpoints
                    and (:categoria_id is null or p.categoria_id = :categoria_id)
                    and (:somente_ativos = 0 or p.ativo = 'S')
                    and (:somente_vendiveis = 0 or p.vendivel = 'S')
-                   and (:pendencia_fiscal = 0 or p.ncm is null or p.cfop is null or p.csosn is null or p.cst_pis_cofins is null)
+                   and (:pendencia_fiscal = 0 or (p.tipo <> 'S' and p.taxa_tipo is null
+                        and (p.ncm is null or p.cfop is null or p.csosn is null or p.cst_pis_cofins is null)))
                  order by c.ordem, p.ordem, p.nome
                 """;
             return await c.QueryAsync<ProdutoResumo>(sql, new

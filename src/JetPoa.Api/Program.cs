@@ -9,7 +9,13 @@ CultureInfo.DefaultThreadCurrentCulture = CultureInfo.CurrentCulture = CultureIn
 // Colunas Oracle em snake_case (PRECO_VENDA) -> propriedades C# (PrecoVenda)
 DefaultTypeMap.MatchNamesWithUnderscores = true;
 
-var builder = WebApplication.CreateBuilder(args);
+var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+{
+    Args = args,
+    // como serviço do Windows o diretório atual é System32: usa a pasta do executável
+    ContentRootPath = Microsoft.Extensions.Hosting.WindowsServices.WindowsServiceHelpers.IsWindowsService() ? AppContext.BaseDirectory : default,
+});
+builder.Host.UseWindowsService(o => o.ServiceName = "JetPOABistro");
 
 // Segredos locais (fora do Git): conexão, certificado A1 e CSC
 builder.Configuration.AddArquivoConf(builder.Configuration["ArquivoConfiguracao"]);
@@ -53,6 +59,8 @@ app.MapFiscal();
 app.MapCheckin();
 app.MapEstoque();
 app.MapRelatorios();
+app.MapProdutos();
+app.MapImplantacao();
 
 app.MapFallbackToFile("index.html");
 

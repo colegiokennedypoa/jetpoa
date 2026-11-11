@@ -10,6 +10,7 @@ import Fiscal from './pages/Fiscal'
 import Checkin from './pages/Checkin'
 import Estoque from './pages/Estoque'
 import Relatorios from './pages/Relatorios'
+import Implantacao from './pages/Implantacao'
 import './App.css'
 
 const ABAS = {
@@ -23,6 +24,7 @@ const ABAS = {
   clientes: 'Clientes',
   produtos: 'Produtos',
   usuarios: 'Usuários',
+  implantacao: 'Implantação',
 } as const
 type Aba = keyof typeof ABAS
 
@@ -66,6 +68,7 @@ export default function App() {
         {aba === 'clientes' && <Clientes />}
         {aba === 'produtos' && <Produtos />}
         {aba === 'usuarios' && <Usuarios />}
+        {aba === 'implantacao' && <Implantacao />}
       </main>
     </div>
   )

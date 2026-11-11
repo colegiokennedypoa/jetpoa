@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api, brl, type Categoria, type ProdutoResumo } from '../api'
+import EditarProduto from '../components/EditarProduto'
 
 const TIPO = { P: 'Produto', K: 'Kit/Combo', S: 'Serviço' } as const
 
@@ -10,6 +11,9 @@ export default function Produtos() {
   const [categoriaId, setCategoriaId] = useState<number | undefined>()
   const [pendencia, setPendencia] = useState(false)
   const [erro, setErro] = useState<string>()
+  const [editando, setEditando] = useState<number | 'novo' | null>(null)
+  const [msg, setMsg] = useState<{ tipo: 'ok' | 'erro'; texto: string }>()
+  const [versao, setVersao] = useState(0)
 
   useEffect(() => { api.categorias().then(setCategorias).catch(e => setErro(e.message)) }, [])
 
@@ -20,7 +24,7 @@ export default function Produtos() {
         .catch(e => setErro(e.message))
     }, 250)
     return () => clearTimeout(t)
-  }, [busca, categoriaId, pendencia])
+  }, [busca, categoriaId, pendencia, versao])
 
   return (
     <section>
@@ -31,12 +35,18 @@ export default function Produtos() {
           {categorias.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
         </select>
         <label><input type="checkbox" checked={pendencia} onChange={e => setPendencia(e.target.checked)} /> Só com pendência fiscal</label>
+        <button onClick={() => setEditando('novo')}>+ Novo produto</button>
         <span className="contador">{itens.length} produtos</span>
       </div>
       {erro && <p className="erro">{erro}</p>}
+      {msg && <p className={msg.tipo}>{msg.texto}</p>}
+      {editando !== null && (
+        <EditarProduto key={String(editando)} id={editando === 'novo' ? null : editando} categorias={categorias}
+          onFim={m => { setEditando(null); if (m) setMsg(m); setVersao(v => v + 1) }} />
+      )}
       <table>
         <thead>
-          <tr><th>Produto</th><th>Categoria</th><th>Tipo</th><th>Setor</th><th className="num">Preço</th><th className="num">Estoque</th><th>NCM</th><th>CFOP</th><th>CSOSN</th><th>NFC-e</th></tr>
+          <tr><th>Produto</th><th>Categoria</th><th>Tipo</th><th>Setor</th><th className="num">Preço</th><th className="num">Estoque</th><th>NCM</th><th>CFOP</th><th>CSOSN</th><th>NFC-e</th><th></th></tr>
         </thead>
         <tbody>
           {itens.map(p => (
@@ -50,7 +60,10 @@ export default function Produtos() {
               <td>{p.ncm ?? '—'}</td>
               <td>{p.cfop ?? '—'}</td>
               <td>{p.csosn ?? '—'}</td>
-              <td>{p.fiscalOk === 'S' ? <span className="tag ok">OK</span> : <span className="tag pend">Pendente</span>}</td>
+              <td>{p.fiscalOk === 'S' ? <span className="tag ok">OK</span>
+                : p.fiscalOk === 'X' ? <span className="tag" title="Serviço/taxa não entra na NFC-e">fora da nota</span>
+                : <span className="tag pend">Pendente</span>}</td>
+              <td><button className="sec" onClick={() => { setEditando(p.id); window.scrollTo({ top: 0 }) }}>Editar</button></td>
             </tr>
           ))}
         </tbody>

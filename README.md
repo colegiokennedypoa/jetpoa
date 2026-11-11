@@ -97,10 +97,16 @@ dotnet run --project src/JetPoa.Api        # API em http://localhost:5080  (Swag
 cd web; npm run dev                        # front em http://localhost:5173 (proxy /api → 5080)
 ```
 
-## Publicar (servidor)
+## Implantação (Fase 6)
+**Roteiro completo da virada:** [docs/02-roteiro-virada.md](docs/02-roteiro-virada.md). A tela **Implantação** mostra o checklist ao vivo: usuários, impressoras, NFC-e, certificado, SEFAZ, produtos pendentes, numeração e Forms parado.
+
 ```powershell
-cd web; npm run build; cd ..
-dotnet publish src/JetPoa.Api -c Release -o publish
+.\scripts\publicar.ps1           # build do front + testes + publish em C:\Projeto\JetPOA\app
+.\scripts\instalar-servico.ps1   # (Administrador) serviço JetPOABistro, reinício automático, firewall 5080 só rede local
+.\scripts\atualizar.ps1          # (Administrador) nova versão: compila/testa antes de parar e guarda a anterior
 ```
+- **Produtos:** criar e editar (preço, setor de impressão, estoque mínimo e dados fiscais com orientação), com PIN de gerente e auditoria.
+- **Importar clientes do Forms:** mailing, reservas, pedidos e comandas, com deduplicação por CPF/celular. Mostra prévia antes de gravar.
+- **Sincronizar produtos do Forms** durante o paralelo: novos, preço e ativo. Dados fiscais só preenchem o que está vazio.
 
 > Numeração da NFC-e separada por ambiente (`db/06_numeracao_por_ambiente.sql`): testes em homologação não consomem números de produção.

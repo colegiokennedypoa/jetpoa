@@ -15,7 +15,7 @@ export type ProdutoResumo = {
   cfop: string | null
   csosn: string | null
   cstPisCofins: string | null
-  fiscalOk: 'S' | 'N'
+  fiscalOk: 'S' | 'N' | 'X'
 }
 
 export type ClienteCategoria = { id: number; nome: string }
@@ -132,6 +132,20 @@ export type RelatorioVendas = {
   porProduto: LinhaRel[]; porGarcom: LinhaRel[]; descontosPorMotivo: LinhaRel[]; descontosPorOperador: LinhaRel[]
 }
 
+export type ProdutoCompleto = {
+  id: number; nome: string; descricao: string | null; categoriaId: number; tipo: 'P' | 'K' | 'S'; setorProducaoId: number; unidade: string
+  precoVenda: number; precoCusto: number | null; controlaEstoque: string; estoqueAtual: number; estoqueMinimo: number | null
+  vendivel: string; ativo: string; ordem: number; ncm: string | null; cest: string | null; cfop: string | null; csosn: string | null
+  cstPisCofins: string | null; gtin: string | null; taxaTipo: string | null; legadoCdProduto: number | null
+}
+export type ProdutoInput = {
+  nome: string; descricao: string | null; categoriaId: number; tipo: 'P' | 'K' | 'S'; setorProducaoId: number; unidade: string | null
+  precoVenda: number; precoCusto: number | null; controlaEstoque: boolean; estoqueMinimo: number | null; vendivel: boolean; ativo: boolean
+  ordem: number | null; ncm: string | null; cest: string | null; cfop: string | null; csosn: string | null; cstPisCofins: string | null
+  gtin: string | null; usuarioId: number; pin: string
+}
+export type ItemChecklist = { grupo: string; titulo: string; status: 'ok' | 'aviso' | 'erro' | 'manual' | 'info'; detalhe: string }
+
 export type Pagamento = { formaPagamentoId: number; valor: number; valorRecebido: number | null; autorizacao: string | null }
 
 export type ComandaItem = {
@@ -240,6 +254,16 @@ export const api = {
     req<{ saldo: number }>('/api/estoque/movimento', { method: 'POST', body: JSON.stringify(m) }),
   inventario: (i: { itens: { produtoId: number; contado: number }[]; observacao: string | null; usuarioId: number; pin: string }) =>
     req<{ ajustados: number }>('/api/estoque/inventario', { method: 'POST', body: JSON.stringify(i) }),
+
+  produto: (id: number) => req<ProdutoCompleto>(`/api/produtos/${id}`),
+  salvarProduto: (id: number | null, p: ProdutoInput) =>
+    req<{ id: number; avisosFiscais: string[] }>(id ? `/api/produtos/${id}` : '/api/produtos', { method: id ? 'PUT' : 'POST', body: JSON.stringify(p) }),
+
+  checklist: (sefaz: boolean) => req<ItemChecklist[]>(`/api/implantacao/checklist?sefaz=${sefaz}`),
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  importarClientes: (aplicar: boolean, usuarioId: number, pin: string) => req<any>(`/api/implantacao/clientes/importar?aplicar=${aplicar}`, { method: 'POST', body: JSON.stringify({ usuarioId, pin }) }),
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  sincronizarProdutos: (aplicar: boolean, usuarioId: number, pin: string) => req<any>(`/api/implantacao/produtos/sincronizar?aplicar=${aplicar}`, { method: 'POST', body: JSON.stringify({ usuarioId, pin }) }),
 
   relatorioVendas: (de: string, ate: string) => req<RelatorioVendas>(`/api/relatorios/vendas?de=${de}&ate=${ate}`),
 
