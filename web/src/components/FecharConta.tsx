@@ -79,7 +79,13 @@ export default function FecharConta({ comanda, itens, onFechada, onVoltar }: Pro
         pagamentos, cpfCnpjNota: cpfNota.trim() || null,
       })
       gravarLocal(CHAVE_OPERADOR, String(operadorId))
-      onFechada(`Comanda ${comanda.numero} fechada: ${brl(r.total)}${r.troco > 0 ? ` · TROCO ${brl(r.troco)}` : ''}.`)
+      const nf = r.nfce
+      const nota = !nf ? ''
+        : nf.situacao === 'AUTORIZADA' ? ` NFC-e ${nf.numero} autorizada.`
+        : nf.situacao === 'CONTINGENCIA' ? ` NFC-e ${nf.numero} em contingência (será transmitida).`
+        : ` NFC-e: ${nf.mensagem ?? nf.situacao}`
+      onFechada(`Comanda ${comanda.numero} fechada: ${brl(r.total)}${r.troco > 0 ? ` · TROCO ${brl(r.troco)}` : ''}.${nota}`
+        + (r.erroDanfe ? ` DANFE não impresso: ${r.erroDanfe}` : ''))
     } catch (e) {
       setErro((e as Error).message)
     } finally {

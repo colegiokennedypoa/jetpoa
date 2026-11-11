@@ -1,0 +1,204 @@
+using System.Text;
+using Dapper;
+using JetPoa.Api.Data;
+using JetPoa.Api.Domain;
+using JetPoa.Api.Fiscal;
+using JetPoa.Api.Impressao;
+using Microsoft.Extensions.Options;
+
+namespace JetPoa.Api.Endpoints;
+
+public static class FiscalEndpoints
+{
+    public sealed class NotaResumo
+    {
+        public long Id { get; set; }
+        public long? ComandaId { get; set; }
+        public int? ComandaNumero { get; set; }
+        public int Serie { get; set; }
+        public int Numero { get; set; }
+        public string Chave { get; set; } = "";
+        public string Ambiente { get; set; } = "";
+        public string TpEmis { get; set; } = "";
+        public string Situacao { get; set; } = "";
+        public DateTime EmitidaEm { get; set; }
+        public decimal ValorTotal { get; set; }
+        public string? Protocolo { get; set; }
+        public string? CStat { get; set; }
+        public string? XMotivo { get; set; }
+        public int Tentativas { get; set; }
+    }
+
+    public sealed class ComandaSemNota
+    {
+        public long Id { get; set; }
+        public int Numero { get; set; }
+        public string? Identificacao { get; set; }
+        public DateTime FechadaEm { get; set; }
+        public decimal ValorTotal { get; set; }
+        public string? UltimaSituacao { get; set; }
+        public string? UltimoMotivo { get; set; }
+    }
+
+    public sealed record AutorizacaoInput(long UsuarioId, string Pin);
+    public sealed record CancelarNotaInput(string Justificativa, long UsuarioId, string Pin);
+    public sealed record InutilizarInput(int? Serie, int Inicial, int Final, string Justificativa, long UsuarioId, string Pin);
+
+    public static void MapFiscal(this IEndpointRouteBuilder app)
+    {
+        var g = app.MapGroup("/api/fiscal").WithTags("Fiscal (NFC-e)");
+
+        g.MapGet("/status", (IOptionsMonitor<NfceOptions> o, NfceService nfce) =>
+        {
+            var opt = o.CurrentValue;
+            object? cert = null;
+            string? erroCert = null;
+            if (opt.Configurada)
+            {
+                try
+                {
+                    var c = nfce.Certificado();
+                    cert = new { titular = c.GetNameInfo(System.Security.Cryptography.X509Certificates.X509NameType.SimpleName, false),
+                                 validade = c.NotAfter, diasRestantes = (int)(c.NotAfter - DateTime.Now).TotalDays };
+                }
+                catch (Exception e) { erroCert = "Não foi possível abrir o certificado: " + e.Message; }
+            }
+            return Results.Ok(new
+            {
+                configurada = opt.Configurada,
+                ambiente = opt.Ambiente,
+                ambienteNome = opt.Ambiente == 1 ? "Produção" : "Homologação (sem valor fiscal)",
+                serie = opt.Serie,
+                certificado = cert,
+                erroCertificado = erroCert,
+                faltando = opt.Configurada ? null : new[]
+                {
+                    string.IsNullOrWhiteSpace(opt.CertificadoArquivo) || !File.Exists(opt.CertificadoArquivo) ? "Certificado A1 (.pfx) — Nfce__CertificadoArquivo / Nfce__CertificadoSenha" : null,
+                    string.IsNullOrWhiteSpace(opt.CscId) || string.IsNullOrWhiteSpace(opt.Csc) ? "CSC (ID e código) — Nfce__CscId / Nfce__Csc" : null,
+                }.Where(x => x is not null)
+            });
+        });
+
+        g.MapGet("/status-sefaz", async (NfceService nfce, IOptionsMonitor<NfceOptions> o, CancellationToken ct) =>
+        {
+            if (!o.CurrentValue.Configurada) return Results.UnprocessableEntity(new { erro = "NFC-e não configurada." });
+            try { var (cStat, xMotivo) = await nfce.StatusServicoAsync(ct); return Results.Ok(new { cStat, xMotivo, online = cStat == "107" }); }
+            catch (SefazClient.FalhaComunicacao e) { return Results.Ok(new { cStat = "", xMotivo = e.Message, online = false }); }
+        });
+
+        g.MapGet("/notas", async (Db db, string? situacao, CancellationToken ct) =>
+        {
+            using var c = await db.OpenAsync(ct);
+            return await c.QueryAsync<NotaResumo>("""
+                select n.id, n.comanda_id, co.numero comanda_numero, n.serie, n.numero, n.chave, n.ambiente, n.tp_emis, n.situacao,
+                       n.emitida_em, n.valor_total, n.protocolo, n.c_stat, n.x_motivo, n.tentativas
+                  from nfce n left join comanda co on co.id = n.comanda_id
+                 where (:situacao is null and n.emitida_em > sysdate - 2) or n.situacao = :situacao
+                 order by n.id desc
+                """, new { situacao = string.IsNullOrWhiteSpace(situacao) ? null : situacao });
+        });
+
+        // Comandas fechadas (7 dias) que ainda não têm NFC-e válida
+        g.MapGet("/pendentes", async (Db db, CancellationToken ct) =>
+        {
+            using var c = await db.OpenAsync(ct);
+            return await c.QueryAsync<ComandaSemNota>("""
+                select co.id, co.numero, nvl(cl.nome, co.identificacao) identificacao, co.fechada_em, co.valor_total,
+                       (select max(n.situacao) keep (dense_rank last order by n.id) from nfce n where n.comanda_id = co.id) ultima_situacao,
+                       (select max(n.x_motivo) keep (dense_rank last order by n.id) from nfce n where n.comanda_id = co.id) ultimo_motivo
+                  from comanda co left join cliente cl on cl.id = co.cliente_id
+                 where co.situacao = 'F' and co.consumo_interno = 'N' and co.valor_total > 0
+                   and co.fechada_em > sysdate - 7
+                   and not exists (select 1 from nfce n where n.comanda_id = co.id
+                                     and n.situacao in ('AUTORIZADA','CONTINGENCIA','PENDENTE','VERIFICAR','CANCELADA'))
+                 order by co.fechada_em desc
+                """);
+        });
+
+        g.MapPost("/comandas/{id:long}/emitir", async (NfceService nfce, Db db, long id, CancellationToken ct) =>
+        {
+            var r = await nfce.EmitirAsync(id, ct);
+            if (r.Nova && r.Id is not null && r.Situacao is "AUTORIZADA" or "CONTINGENCIA") await ImprimirDanfeAsync(db, nfce, r.Id.Value, ct);
+            return Results.Ok(r);
+        });
+
+        g.MapPost("/notas/{id:long}/reenviar", async (NfceService nfce, Db db, long id, CancellationToken ct) =>
+        {
+            var r = await nfce.ReenviarAsync(id, ct);
+            if (r.Situacao == "AUTORIZADA") await ImprimirDanfeAsync(db, nfce, id, ct);
+            return Results.Ok(r);
+        });
+
+        g.MapPost("/notas/{id:long}/cancelar", async (NfceService nfce, Db db, long id, CancelarNotaInput i, CancellationToken ct) =>
+        {
+            var just = i.Justificativa?.Trim() ?? "";
+            if (just.Length is < 15 or > 255) return Results.UnprocessableEntity(new { erro = "Justificativa deve ter de 15 a 255 caracteres." });
+            using (var c = await db.OpenAsync(ct))
+            {
+                var u = await UsuarioEndpoints.AutenticarAsync(c, i.UsuarioId, i.Pin);
+                if (u is null || u.AutorizaDesconto != "S") return Results.UnprocessableEntity(new { erro = "Cancelamento exige PIN de gerente/administrador." });
+            }
+            return Results.Ok(await nfce.CancelarAsync(id, just, i.UsuarioId, ct));
+        });
+
+        g.MapPost("/inutilizar", async (NfceService nfce, Db db, IOptionsMonitor<NfceOptions> o, InutilizarInput i, CancellationToken ct) =>
+        {
+            var just = i.Justificativa?.Trim() ?? "";
+            if (just.Length is < 15 or > 255) return Results.UnprocessableEntity(new { erro = "Justificativa deve ter de 15 a 255 caracteres." });
+            if (i.Inicial <= 0 || i.Final < i.Inicial) return Results.UnprocessableEntity(new { erro = "Faixa de números inválida." });
+            using (var c = await db.OpenAsync(ct))
+            {
+                var u = await UsuarioEndpoints.AutenticarAsync(c, i.UsuarioId, i.Pin);
+                if (u is null || u.AutorizaDesconto != "S") return Results.UnprocessableEntity(new { erro = "Inutilização exige PIN de gerente/administrador." });
+                var serie = i.Serie ?? o.CurrentValue.Serie;
+                var usados = await c.ExecuteScalarAsync<int>("""
+                    select count(*) from nfce where serie = :serie and numero between :ini and :fim
+                       and situacao in ('AUTORIZADA','CONTINGENCIA','CANCELADA','SUBSTITUIDA','PENDENTE')
+                    """, new { serie, ini = i.Inicial, fim = i.Final });
+                if (usados > 0) return Results.UnprocessableEntity(new { erro = "A faixa contém números já usados em notas válidas." });
+            }
+            return Results.Ok(await nfce.InutilizarAsync(i.Serie ?? o.CurrentValue.Serie, i.Inicial, i.Final, just, i.UsuarioId, ct));
+        });
+
+        g.MapGet("/notas/{id:long}/danfe", async (NfceService nfce, Db db, long id, CancellationToken ct) =>
+        {
+            using var c = await db.OpenAsync(ct);
+            var n = await nfce.ObterAsync(c, id);
+            if (n?.Xml is null) return Results.NotFound();
+            return Results.Content(Danfe.Html(Danfe.Ler(n.Xml, n.Protocolo, n.AutorizadaEm)), "text/html; charset=utf-8");
+        });
+
+        g.MapGet("/notas/{id:long}/xml", async (NfceService nfce, Db db, long id, CancellationToken ct) =>
+        {
+            using var c = await db.OpenAsync(ct);
+            var n = await nfce.ObterAsync(c, id);
+            if (n?.Xml is null) return Results.NotFound();
+            var xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" + (n.XmlAutorizado ?? n.Xml);
+            return Results.File(Encoding.UTF8.GetBytes(xml), "application/xml", $"{n.Chave}-nfce.xml");
+        });
+
+        g.MapPost("/notas/{id:long}/imprimir", async (NfceService nfce, Db db, long id, CancellationToken ct) =>
+        {
+            var erro = await ImprimirDanfeAsync(db, nfce, id, ct);
+            return erro is null ? Results.Ok(new { ok = true }) : Results.UnprocessableEntity(new { erro });
+        });
+    }
+
+    /// <summary>Imprime o DANFE na impressora do setor CAIXA. Devolve a mensagem de erro (ou null).</summary>
+    public static async Task<string?> ImprimirDanfeAsync(Db db, NfceService nfce, long id, CancellationToken ct)
+    {
+        using var c = await db.OpenAsync(ct);
+        var n = await nfce.ObterAsync(c, id);
+        if (n?.Xml is null) return "Nota não encontrada.";
+        var cx = await c.QuerySingleOrDefaultAsync<(string Imprime, string? Host, decimal? Porta, decimal Colunas)>(
+            "select imprime, impressora_host, impressora_porta, colunas_impressao from setor_producao where codigo = 'CAIXA'");
+        if (cx.Imprime != "S" || string.IsNullOrWhiteSpace(cx.Host)) return "Impressora do caixa não configurada (tela Produção, setor Caixa).";
+        try
+        {
+            var bytes = Danfe.EscPos(Danfe.Ler(n.XmlAutorizado ?? n.Xml, n.Protocolo, n.AutorizadaEm), (int)cx.Colunas);
+            await ImpressoraRede.EnviarAsync(cx.Host, (int)(cx.Porta ?? 9100), bytes, ct);
+            return null;
+        }
+        catch (Exception e) { return e.Message; }
+    }
+}

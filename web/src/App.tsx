@@ -6,12 +6,14 @@ import Producao from './pages/Producao'
 import Produtos from './pages/Produtos'
 import Clientes from './pages/Clientes'
 import Usuarios from './pages/Usuarios'
+import Fiscal from './pages/Fiscal'
 import './App.css'
 
 const ABAS = {
   comandas: 'Comandas',
   garcom: 'Garçom',
   producao: 'Produção',
+  fiscal: 'Fiscal',
   clientes: 'Clientes',
   produtos: 'Produtos',
   usuarios: 'Usuários',
@@ -51,6 +53,7 @@ export default function App() {
         {aba === 'comandas' && <Comandas />}
         {aba === 'garcom' && <Garcom />}
         {aba === 'producao' && <Producao />}
+        {aba === 'fiscal' && <Fiscal />}
         {aba === 'clientes' && <Clientes />}
         {aba === 'produtos' && <Produtos />}
         {aba === 'usuarios' && <Usuarios />}

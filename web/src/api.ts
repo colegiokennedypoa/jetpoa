@@ -85,6 +85,22 @@ export type Calculo = {
   consumoInterno: boolean; descontos: DescontoCalculado[]; erros: string[]
 }
 export type Simulacao = { calculo: Calculo; limiteOperadorPct: number | null; exigeAutorizacao: boolean }
+export type NfceResultado = { situacao: string; id: number | null; numero: number | null; chave: string | null; mensagem: string | null }
+export type FiscalStatus = {
+  configurada: boolean; ambiente: number; ambienteNome: string; serie: number
+  certificado: { titular: string; validade: string; diasRestantes: number } | null
+  erroCertificado: string | null; faltando: string[] | null
+}
+export type Nota = {
+  id: number; comandaId: number | null; comandaNumero: number | null; serie: number; numero: number; chave: string
+  ambiente: string; tpEmis: string; situacao: string; emitidaEm: string; valorTotal: number
+  protocolo: string | null; cStat: string | null; xMotivo: string | null; tentativas: number
+}
+export type ComandaSemNota = {
+  id: number; numero: number; identificacao: string | null; fechadaEm: string; valorTotal: number
+  ultimaSituacao: string | null; ultimoMotivo: string | null
+}
+
 export type Pagamento = { formaPagamentoId: number; valor: number; valorRecebido: number | null; autorizacao: string | null }
 
 export type ComandaItem = {
@@ -171,7 +187,20 @@ export const api = {
   fechar: (id: number, f: {
     pedido: PedidoFechamento; operadorId: number; operadorPin: string; autorizadorId: number | null; autorizadorPin: string | null
     pagamentos: Pagamento[]; cpfCnpjNota: string | null
-  }) => req<{ id: number; total: number; troco: number; descontoTotal: number }>(`/api/comandas/${id}/fechar`, { method: 'POST', body: JSON.stringify(f) }),
+  }) => req<{ id: number; total: number; troco: number; descontoTotal: number; nfce: NfceResultado | null; erroDanfe: string | null }>(
+    `/api/comandas/${id}/fechar`, { method: 'POST', body: JSON.stringify(f) }),
+
+  fiscalStatus: () => req<FiscalStatus>('/api/fiscal/status'),
+  statusSefaz: () => req<{ cStat: string; xMotivo: string; online: boolean }>('/api/fiscal/status-sefaz'),
+  notas: (situacao?: string) => req<Nota[]>(`/api/fiscal/notas${situacao ? `?situacao=${situacao}` : ''}`),
+  comandasSemNota: () => req<ComandaSemNota[]>('/api/fiscal/pendentes'),
+  emitirNota: (comandaId: number) => req<NfceResultado>(`/api/fiscal/comandas/${comandaId}/emitir`, { method: 'POST' }),
+  reenviarNota: (id: number) => req<NfceResultado>(`/api/fiscal/notas/${id}/reenviar`, { method: 'POST' }),
+  imprimirNota: (id: number) => req<{ ok: boolean }>(`/api/fiscal/notas/${id}/imprimir`, { method: 'POST' }),
+  cancelarNota: (id: number, justificativa: string, usuarioId: number, pin: string) =>
+    req<NfceResultado>(`/api/fiscal/notas/${id}/cancelar`, { method: 'POST', body: JSON.stringify({ justificativa, usuarioId, pin }) }),
+  inutilizar: (i: { serie: number | null; inicial: number; final: number; justificativa: string; usuarioId: number; pin: string }) =>
+    req<NfceResultado>('/api/fiscal/inutilizar', { method: 'POST', body: JSON.stringify(i) }),
   cancelarComanda: (id: number, motivo: string, usuarioId: number, pin: string) =>
     req<void>(`/api/comandas/${id}/cancelar`, { method: 'POST', body: JSON.stringify({ motivo, usuarioId, pin }) }),
 }

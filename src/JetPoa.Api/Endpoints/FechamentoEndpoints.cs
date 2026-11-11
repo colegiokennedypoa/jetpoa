@@ -94,7 +94,8 @@ public static class FechamentoEndpoints
             return Results.Ok(new { calculo = r, limiteOperadorPct = limite, exigeAutorizacao = exige });
         });
 
-        g.MapPost("/comandas/{id:long}/fechar", async (Db db, long id, FecharInput i, CancellationToken ct) =>
+        g.MapPost("/comandas/{id:long}/fechar", async (Db db, Fiscal.NfceService nfce, Microsoft.Extensions.Options.IOptionsMonitor<Fiscal.NfceOptions> nfceOpt,
+                                                       long id, FecharInput i, CancellationToken ct) =>
         {
             using var c = await db.OpenAsync(ct);
             using var tx = c.BeginTransaction();
@@ -200,15 +201,32 @@ public static class FechamentoEndpoints
             await c.ExecuteAsync("""
                 insert into auditoria (usuario_id, entidade, entidade_id, acao, detalhe)
                 values (:op, 'COMANDA', :id, 'FECHAMENTO', :detalhe)
-                """, new { op = operador.Id, id = id.ToString(), detalhe = JsonSerializer.Serialize(new
+                """, new { op = operador.Id, id = id.ToString(), detalhe = new Clob(JsonSerializer.Serialize(new
                 {
                     r.Subtotal, r.DescontoTotal, r.DescontoConcedidoPct, r.TaxaServico, r.Total, troco,
                     autorizador = autorizadorId, descontos = r.Descontos.Select(d => new { d.Origem, d.Descricao, d.Valor, d.MotivoId, d.Observacao }),
                     pagamentos = pagamentos.Select(p => new { p.FormaPagamentoId, p.Valor })
-                }) }, tx);
+                })) }, tx);
 
             tx.Commit();
-            return Results.Ok(new { id, total = r.Total, troco, descontoTotal = r.DescontoTotal });
+
+            // NFC-e: a comanda já está fechada; falhas fiscais não desfazem o fechamento (ficam pendentes na tela Fiscal)
+            Fiscal.NfceResultado? nota = null;
+            string? erroDanfe = null;
+            if (!r.ConsumoInterno && r.Total > 0 && nfceOpt.CurrentValue.EmitirNoFechamento)
+            {
+                try
+                {
+                    nota = await nfce.EmitirAsync(id, ct);
+                    if (nota.Nova && nota.Id is not null && nota.Situacao is "AUTORIZADA" or "CONTINGENCIA")
+                        erroDanfe = await FiscalEndpoints.ImprimirDanfeAsync(db, nfce, nota.Id.Value, ct);
+                }
+                catch (Exception e)
+                {
+                    nota = new Fiscal.NfceResultado("ERRO", Mensagem: "Falha ao emitir NFC-e: " + e.Message);
+                }
+            }
+            return Results.Ok(new { id, total = r.Total, troco, descontoTotal = r.DescontoTotal, nfce = nota, erroDanfe });
         });
 
         // Cancela comanda inteira (ex.: aberta por engano). Com itens ativos exige quem autoriza desconto.

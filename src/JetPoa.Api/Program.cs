@@ -13,6 +13,9 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddSingleton<Db>();
 builder.Services.AddSingleton<ImpressaoProducao>();
+builder.Services.Configure<JetPoa.Api.Fiscal.NfceOptions>(builder.Configuration.GetSection("Nfce"));
+builder.Services.AddSingleton<JetPoa.Api.Fiscal.NfceService>();
+builder.Services.AddHostedService<JetPoa.Api.Fiscal.NfceWorker>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<ImpressaoProducao>());
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(o => o.CustomSchemaIds(t => t.FullName!.Replace('+', '.')));
@@ -41,6 +44,7 @@ app.MapComandas();
 app.MapProducao();
 app.MapUsuarios();
 app.MapFechamento();
+app.MapFiscal();
 
 app.MapFallbackToFile("index.html");
 

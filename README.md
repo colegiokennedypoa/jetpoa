@@ -16,6 +16,31 @@ Substitui o sistema Forms 6i do bistrô. Análise e proposta: [docs/01-analise-e
 4. `db/02_importar_legado.sql`: como BISTRO (importa produtos, kits, garçons e áreas do ADMINISTRATIVO)
 5. `db/03_fase2_comanda.sql`: como BISTRO (comandas, itens, envios para produção)
 6. `db/04_fase3_fechamento.sql`: como BISTRO (fechamento, descontos, isenções, pagamentos)
+7. `db/05_fase4_nfce.sql`: como BISTRO (emitente, numeração, NFC-e, inutilização, impressora do caixa)
+
+## NFC-e (Fase 4)
+Emissão direta com a SEFAZ-RS (modelo 65, layout 4.00), **sem o Tomcat/AIOWS**: o XML é montado, assinado e transmitido pela própria API.
+
+**Configuração** (variáveis de ambiente do serviço; nunca no Git):
+```powershell
+$env:Nfce__CertificadoArquivo = "C:\caminho\seguro\certificado-a1.pfx"
+$env:Nfce__CertificadoSenha   = "<senha do pfx>"
+$env:Nfce__CscId              = "<ID do CSC, ex.: 1>"
+$env:Nfce__Csc                = "<código CSC da SEFAZ-RS>"
+$env:Nfce__Ambiente           = "2"   # 2 = homologação (testes)  ·  1 = produção
+```
+- **Série 2**: o sistema novo numera na série 2 para não colidir com o Forms (série 1) durante a operação em paralelo.
+- **Primeiro uso:** rodar em **homologação** (`Ambiente = 2`), emitir algumas notas, conferir na tela **Fiscal** e só então passar para produção.
+- **Fluxo:** ao fechar a comanda, a NFC-e é emitida e o DANFE sai na impressora do setor **CAIXA** (configurar o IP na tela Produção). Falha fiscal **não** desfaz o fechamento: a comanda aparece em "Comandas fechadas sem NFC-e" na tela Fiscal.
+- **Antes de numerar**, o sistema valida NCM, CFOP, CSOSN e CST PIS/COFINS de cada produto, incluindo CFOP × CSOSN (500 → 5405; 102 → 5102). Produto inválido não consome número.
+- **Fora da nota:** serviços (tipo S) e taxas (estacionamento, embarque, couvert), além da taxa de serviço. Os pagamentos são rateados para o valor da nota. *Validar com o contador.*
+- **Desconto:** vai em `vDesc` por item (rateio do fechamento). **Forma de pagamento:** `tPag` real (01, 03, 04, 05, 17) com o grupo `card` para cartão e PIX.
+- **SEFAZ sem resposta:**
+  - a nota online fica **VERIFICAR**;
+  - é emitida outra em **contingência offline** (tpEmis 9) com o próximo número, e o DANFE sai com o aviso;
+  - a cada minuto, a rotina transmite as contingências e consulta as notas a verificar. Se a original foi autorizada, ela é cancelada (substituída); se não chegou na SEFAZ, o número é inutilizado.
+- **Tela Fiscal:** status do certificado (dias para vencer), status da SEFAZ, notas das últimas 48h, DANFE (HTML), XML, reimpressão, reenvio de rejeitada, cancelamento e inutilização. Cancelar e inutilizar exigem PIN de gerente.
+- **Testes:** `dotnet test` (28 testes). Chave e QR Code conferem com NFC-e autorizada pela SEFAZ-RS. Para conferir o hash do QR Code com o CSC real: `$env:JETPOA_TEST_CSC = "<csc>"`.
 
 ## Fechamento (Fase 3)
 - **Primeiro uso:** na tela **Usuários**, crie o Administrador. Os demais usuários (Gerente, Caixa…) exigem o PIN de um administrador.
