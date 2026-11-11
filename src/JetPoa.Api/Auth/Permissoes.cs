@@ -17,7 +17,8 @@ public static class Permissoes
     public const string Checkin = "checkin";
     public const string EventoEditar = "evento.editar";
     public const string ClientesVer = "clientes.ver";
-    public const string ClientesEditar = "clientes.editar";
+    public const string ClientesEditar = "clientes.editar";        // cadastrar cliente novo (check-in)
+    public const string ClientesCadastro = "clientes.cadastro";    // tela Clientes: lista completa e edição de existentes
     public const string ProdutosVer = "produtos.ver";
     public const string ProdutosEditar = "produtos.editar";
     public const string ProducaoVer = "producao.ver";               // fila, reimprimir, tentar de novo
@@ -35,7 +36,7 @@ public static class Permissoes
     public static readonly string[] Todas =
     [
         ComandaVer, ComandaAbrir, ComandaLancar, ComandaFechar, ComandaCancelar, ItemCancelar, Checkin, EventoEditar,
-        ClientesVer, ClientesEditar, ProdutosVer, ProdutosEditar, ProducaoVer, ProducaoConfigurar,
+        ClientesVer, ClientesEditar, ClientesCadastro, ProdutosVer, ProdutosEditar, ProducaoVer, ProducaoConfigurar,
         FiscalVer, FiscalEmitir, FiscalCancelar, EstoqueVer, EstoqueMovimentar, EstoqueAjustar, Relatorios,
         UsuariosGerenciar, Implantacao,
     ];
@@ -48,7 +49,7 @@ public static class Permissoes
         "Caixa" =>
         [
             ComandaVer, ComandaAbrir, ComandaLancar, ComandaFechar, ItemCancelar, Checkin,
-            ClientesVer, ClientesEditar, ProdutosVer, ProducaoVer, FiscalVer, FiscalEmitir, EstoqueVer,
+            ClientesVer, ClientesEditar, ClientesCadastro, ProdutosVer, ProducaoVer, FiscalVer, FiscalEmitir, EstoqueVer,
         ],
         // Garçom também abre comanda pela portaria (check-in), como o perfil Check-in
         "Garçom" => [ComandaVer, ComandaLancar, ProdutosVer, Checkin, ClientesVer, ClientesEditar],

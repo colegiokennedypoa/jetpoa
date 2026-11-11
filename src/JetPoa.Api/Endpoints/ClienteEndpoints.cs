@@ -62,11 +62,14 @@ public static class ClienteEndpoints
                 """);
         });
 
-        // Busca por nome, CPF ou celular (paginada, 50 por página)
-        g.MapGet("/clientes", async (Db db, string? busca, int? pagina, CancellationToken ct) =>
+        // Busca por nome, CPF ou celular (paginada, 50 por página).
+        // Sem acesso à tela Clientes (garçom, check-in): só busca com 3+ caracteres e 1ª página — nada de listar o cadastro.
+        g.MapGet("/clientes", async (ClaimsPrincipal user, Db db, string? busca, int? pagina, CancellationToken ct) =>
         {
             var p = Math.Max(pagina ?? 1, 1);
             var termo = string.IsNullOrWhiteSpace(busca) ? null : busca.Trim();
+            if (!user.Pode(Permissoes.ClientesCadastro) && (termo is null || termo.Length < 3 || p > 1))
+                return Results.Ok(Array.Empty<Cliente>());
             var digitos = Documento.SoDigitos(termo);
             using var c = await db.OpenAsync(ct);
             var sql = Db.Paginar(SelectCliente + """
@@ -76,13 +79,13 @@ public static class ClienteEndpoints
                             and (c.cpf like :digitos || '%' or c.celular like '%' || :digitos || '%')))
                  order by c.nome
                 """);
-            return await c.QueryAsync<Cliente>(sql, new
+            return Results.Ok(await c.QueryAsync<Cliente>(sql, new
             {
                 termo,
                 digitos = string.IsNullOrEmpty(digitos) ? null : digitos,
                 pg_ini = (p - 1) * 50,
                 pg_fim = p * 50
-            });
+            }));
         });
 
         // Verificação de CPF já cadastrado (usada nas telas antes de salvar)
@@ -155,7 +158,7 @@ public static class ClienteEndpoints
             {
                 return Results.Conflict(new { erro = "Já existe cliente com este CPF." });
             }
-        });
+        }).RequireAuthorization(Permissoes.ClientesCadastro);   // editar existente: só quem tem a tela Clientes
     }
 
     /// <summary>409 informando quem já usa o CPF (o índice único uk_cliente_cpf é a garantia final).</summary>

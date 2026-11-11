@@ -24,7 +24,7 @@ const ABAS = {
   fiscal: { nome: 'Fiscal', perm: P.fiscalVer },
   estoque: { nome: 'Estoque', perm: P.estoqueVer },
   relatorios: { nome: 'Relatórios', perm: P.relatorios },
-  clientes: { nome: 'Clientes', perm: P.clientesVer },
+  clientes: { nome: 'Clientes', perm: P.clientesCadastro },
   produtos: { nome: 'Produtos', perm: P.produtosEditar },
   usuarios: { nome: 'Usuários', perm: P.usuarios },
   implantacao: { nome: 'Implantação', perm: P.implantacao },

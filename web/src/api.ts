@@ -323,7 +323,7 @@ export const api = {
 export const P = {
   comandaVer: 'comanda.ver', comandaAbrir: 'comanda.abrir', comandaLancar: 'comanda.lancar', comandaFechar: 'comanda.fechar',
   comandaCancelar: 'comanda.cancelar', itemCancelar: 'item.cancelar', checkin: 'checkin', eventoEditar: 'evento.editar',
-  clientesVer: 'clientes.ver', clientesEditar: 'clientes.editar', produtosVer: 'produtos.ver', produtosEditar: 'produtos.editar',
+  clientesVer: 'clientes.ver', clientesEditar: 'clientes.editar', clientesCadastro: 'clientes.cadastro', produtosVer: 'produtos.ver', produtosEditar: 'produtos.editar',
   producaoVer: 'producao.ver', producaoConfigurar: 'producao.configurar', fiscalVer: 'fiscal.ver', fiscalEmitir: 'fiscal.emitir',
   fiscalCancelar: 'fiscal.cancelar', estoqueVer: 'estoque.ver', estoqueMovimentar: 'estoque.movimentar', estoqueAjustar: 'estoque.ajustar',
   relatorios: 'relatorios', usuarios: 'usuarios.gerenciar', implantacao: 'implantacao',
