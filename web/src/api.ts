@@ -101,6 +101,37 @@ export type ComandaSemNota = {
   ultimaSituacao: string | null; ultimoMotivo: string | null
 }
 
+export type Evento = {
+  id: number; data: string; nome: string
+  produtoTerraId: number | null; produtoTerra: string | null; valorTerra: number | null
+  produtoRioId: number | null; produtoRio: string | null; valorRio: number | null
+  couvertProdutoId: number | null; couvertProduto: string | null; valorCouvert: number | null
+  couvertInicio: string | null; couvertFim: string | null; ativo: string
+}
+export type EventoInput = {
+  data: string; nome: string; produtoTerraId: number | null; produtoRioId: number | null
+  couvertProdutoId: number | null; couvertInicio: string | null; couvertFim: string | null; ativo: boolean
+}
+export type CheckinResultado = { comandaId: number; numero: number; entrada: string; cliente: string; evento: string | null; taxas: { nome: string; valor: number }[] }
+export type ItemEstoque = {
+  id: number; nome: string; categoria: string; unidade: string; estoqueAtual: number; estoqueMinimo: number | null
+  precoCusto: number | null; precoVenda: number; comprar: number | null; vendidoHoje: number; ultimoMovimento: string | null
+}
+export type MovimentoEstoque = {
+  id: number; criadoEm: string; produto: string; tipo: string; quantidade: number; saldoApos: number
+  custoUnitario: number | null; comandaNumero: number | null; observacao: string | null; usuario: string | null
+}
+export type LinhaRel = { chave: string; grupo: string | null; qtd: number; quantidade: number; valor: number; custo: number | null }
+export type RelatorioVendas = {
+  de: string; ate: string
+  resumo: {
+    comandas: number; consumoInterno: number; subtotal: number; descontos: number; taxaServico: number; faturamento: number
+    ticketMedio: number; custo: number; itensCancelados: number; valorCancelado: number; nfceAutorizadas: number; valorNfce: number
+  }
+  porDia: LinhaRel[]; porHora: LinhaRel[]; porForma: LinhaRel[]; porEntrada: LinhaRel[]; porCategoria: LinhaRel[]
+  porProduto: LinhaRel[]; porGarcom: LinhaRel[]; descontosPorMotivo: LinhaRel[]; descontosPorOperador: LinhaRel[]
+}
+
 export type Pagamento = { formaPagamentoId: number; valor: number; valorRecebido: number | null; autorizacao: string | null }
 
 export type ComandaItem = {
@@ -139,7 +170,7 @@ const qs = (o: Record<string, string | number | boolean | undefined | null>) =>
 export const api = {
   health: () => req<{ status: string; banco: string; agora: string }>('/api/health'),
   categorias: () => req<Categoria[]>('/api/categorias'),
-  produtos: (p: { busca?: string; categoriaId?: number; pendenciaFiscal?: boolean }) =>
+  produtos: (p: { busca?: string; categoriaId?: number; pendenciaFiscal?: boolean; somenteAtivos?: boolean }) =>
     req<ProdutoResumo[]>(`/api/produtos?${qs(p)}`),
   clienteCategorias: () => req<ClienteCategoria[]>('/api/cliente-categorias'),
   clientes: (busca: string) => req<Cliente[]>(`/api/clientes?${qs({ busca })}`),
@@ -189,6 +220,28 @@ export const api = {
     pagamentos: Pagamento[]; cpfCnpjNota: string | null
   }) => req<{ id: number; total: number; troco: number; descontoTotal: number; nfce: NfceResultado | null; erroDanfe: string | null }>(
     `/api/comandas/${id}/fechar`, { method: 'POST', body: JSON.stringify(f) }),
+
+  eventos: () => req<Evento[]>('/api/eventos'),
+  eventoHoje: () => req<Evento | null>('/api/eventos/hoje'),
+  salvarEvento: (id: number | null, e: EventoInput) =>
+    req<void>(id ? `/api/eventos/${id}` : '/api/eventos', { method: id ? 'PUT' : 'POST', body: JSON.stringify(e) }),
+  checkin: (i: {
+    numero: number; entradaTipo: 'T' | 'R'; areaId: number | null; clienteId: number | null
+    novoCliente: { nome: string; cpf: string | null; celular: string | null; email: string | null; sexo: string | null; aceitaComunicacao: boolean } | null
+    identificacao: string | null; observacao: string | null
+  }) => req<CheckinResultado>('/api/checkin', { method: 'POST', body: JSON.stringify(i) }),
+  checkout: (numero: number) => req<{ numero: number; cliente: string; situacao: string; total: number }>('/api/checkout', { method: 'POST', body: JSON.stringify({ numero }) }),
+  presentes: () => req<{ entrada: string; quantidade: number }[]>('/api/checkin/presentes'),
+
+  estoque: (abaixoMinimo = false) => req<ItemEstoque[]>(`/api/estoque?abaixoMinimo=${abaixoMinimo}`),
+  movimentosEstoque: (produtoId: number | null, dias: number) =>
+    req<MovimentoEstoque[]>(`/api/estoque/movimentos?dias=${dias}${produtoId ? `&produtoId=${produtoId}` : ''}`),
+  movimentarEstoque: (m: { produtoId: number; tipo: 'E' | 'P' | 'A'; quantidade: number; custoUnitario: number | null; observacao: string | null; usuarioId: number; pin: string }) =>
+    req<{ saldo: number }>('/api/estoque/movimento', { method: 'POST', body: JSON.stringify(m) }),
+  inventario: (i: { itens: { produtoId: number; contado: number }[]; observacao: string | null; usuarioId: number; pin: string }) =>
+    req<{ ajustados: number }>('/api/estoque/inventario', { method: 'POST', body: JSON.stringify(i) }),
+
+  relatorioVendas: (de: string, ate: string) => req<RelatorioVendas>(`/api/relatorios/vendas?de=${de}&ate=${ate}`),
 
   fiscalStatus: () => req<FiscalStatus>('/api/fiscal/status'),
   statusSefaz: () => req<{ cStat: string; xMotivo: string; online: boolean }>('/api/fiscal/status-sefaz'),

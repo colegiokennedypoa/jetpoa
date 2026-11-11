@@ -17,6 +17,27 @@ Substitui o sistema Forms 6i do bistrô. Análise e proposta: [docs/01-analise-e
 5. `db/03_fase2_comanda.sql`: como BISTRO (comandas, itens, envios para produção)
 6. `db/04_fase3_fechamento.sql`: como BISTRO (fechamento, descontos, isenções, pagamentos)
 7. `db/05_fase4_nfce.sql`: como BISTRO (emitente, numeração, NFC-e, inutilização, impressora do caixa)
+8. `db/06_numeracao_por_ambiente.sql` e `db/07_fase5_checkin_estoque.sql`: como BISTRO
+
+## Check-in, estoque e relatórios (Fase 5)
+- **Check-in (portaria TERRA / RIO):** cada aparelho lembra a sua portaria.
+  - Busca o cliente por CPF, celular ou nome, cadastra na hora sem duplicar (CPF ou celular) ou usa só um nome.
+  - Abre a comanda pelo número da pulseira e **lança as taxas do evento do dia**: estacionamento (terra), embarque (rio) e couvert se a entrada for antes do fim da janela.
+  - As isenções por categoria do cliente (VIP, sócio…) são aplicadas no fechamento.
+- **Check-out:** registra a saída e **bloqueia** se a comanda ainda estiver aberta, encaminhando ao caixa.
+- **Eventos:** aba Eventos no Check-in, com data, taxa de terra, taxa de rio e couvert com horário. Substitui `TB_BAR_EVENTO`/`TB_BAR_COUVER`.
+- **Estoque:**
+  - baixa automática no fechamento (o kit baixa os componentes, ex.: COMBO 6 HEINEKEN baixa 6 Heineken);
+  - entrada de compra, que atualiza o custo;
+  - perda com motivo e ajuste (só gerente);
+  - inventário que lança apenas a diferença;
+  - histórico por produto e lista "abaixo do mínimo" (quanto comprar).
+  - Saldo negativo é permitido: a venda nunca é bloqueada por estoque.
+- **Relatórios** por período, com exportação CSV:
+  - faturamento, ticket médio, descontos, taxa de serviço, CMV e margem, cancelamentos, NFC-e autorizadas × faturamento;
+  - por dia, horário, forma de pagamento, entrada Terra/Rio, categoria, produto e garçom;
+  - descontos por motivo e por operador/autorizador.
+  - O CMV usa o custo atual do produto.
 
 ## NFC-e (Fase 4)
 Emissão direta com a SEFAZ-RS (modelo 65, layout 4.00), **sem o Tomcat/AIOWS**: o XML é montado, assinado e transmitido pela própria API.

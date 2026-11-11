@@ -13,6 +13,8 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Segredos locais (fora do Git): conexão, certificado A1 e CSC
 builder.Configuration.AddArquivoConf(builder.Configuration["ArquivoConfiguracao"]);
+// variáveis de ambiente continuam valendo por cima do arquivo (ex.: desligar algo pontualmente)
+builder.Configuration.AddEnvironmentVariables();
 
 builder.Services.AddSingleton<Db>();
 builder.Services.AddSingleton<ImpressaoProducao>();
@@ -48,6 +50,9 @@ app.MapProducao();
 app.MapUsuarios();
 app.MapFechamento();
 app.MapFiscal();
+app.MapCheckin();
+app.MapEstoque();
+app.MapRelatorios();
 
 app.MapFallbackToFile("index.html");
 

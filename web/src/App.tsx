@@ -7,13 +7,19 @@ import Produtos from './pages/Produtos'
 import Clientes from './pages/Clientes'
 import Usuarios from './pages/Usuarios'
 import Fiscal from './pages/Fiscal'
+import Checkin from './pages/Checkin'
+import Estoque from './pages/Estoque'
+import Relatorios from './pages/Relatorios'
 import './App.css'
 
 const ABAS = {
+  checkin: 'Check-in',
   comandas: 'Comandas',
   garcom: 'Garçom',
   producao: 'Produção',
   fiscal: 'Fiscal',
+  estoque: 'Estoque',
+  relatorios: 'Relatórios',
   clientes: 'Clientes',
   produtos: 'Produtos',
   usuarios: 'Usuários',
@@ -50,6 +56,9 @@ export default function App() {
         <span className="status">{banco}</span>
       </header>
       <main>
+        {aba === 'checkin' && <Checkin />}
+        {aba === 'estoque' && <Estoque />}
+        {aba === 'relatorios' && <Relatorios />}
         {aba === 'comandas' && <Comandas />}
         {aba === 'garcom' && <Garcom />}
         {aba === 'producao' && <Producao />}

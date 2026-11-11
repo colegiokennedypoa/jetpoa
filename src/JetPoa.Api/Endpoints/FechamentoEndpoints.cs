@@ -198,6 +198,9 @@ public static class FechamentoEndpoints
                           desconto = r.DescontoTotal, pct = r.TaxaServicoPct, taxa = r.TaxaServico, total = r.Total,
                           troco, doc, aut = autorizadorId }, tx);
 
+            // baixa de estoque da venda (kits baixam os componentes)
+            await Estoque.BaixarVendaAsync(c, id, operador.Id, tx);
+
             await c.ExecuteAsync("""
                 insert into auditoria (usuario_id, entidade, entidade_id, acao, detalhe)
                 values (:op, 'COMANDA', :id, 'FECHAMENTO', :detalhe)
