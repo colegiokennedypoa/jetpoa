@@ -10,6 +10,8 @@ namespace JetPoa.Api.Fiscal;
 /// <param name="Nova">false quando a nota já existia (não reimprimir o DANFE automaticamente).</param>
 public sealed record NfceResultado(string Situacao, long? Id = null, int? Numero = null, string? Chave = null, string? Mensagem = null, bool Nova = true);
 
+public sealed class NumeracaoNaoConfigurada(string msg) : Exception(msg);
+
 /// <summary>Emissão, transmissão, contingência, cancelamento e inutilização da NFC-e.</summary>
 public sealed class NfceService(Db db, IOptionsMonitor<NfceOptions> opcoes, ILogger<NfceService> log)
 {
@@ -112,7 +114,9 @@ public sealed class NfceService(Db db, IOptionsMonitor<NfceOptions> opcoes, ILog
                 return new("DADOS_FISCAIS", Mensagem: "Produtos sem dados fiscais válidos: " + string.Join(" | ", erros));
             if (dados is null) return new("SEM_NOTA", Mensagem: "Nenhum item tributável (somente serviços/taxas).");
 
-            var id = await GerarEGravarAsync(c, comandaId, dados, tpEmis: 1);
+            long id;
+            try { id = await GerarEGravarAsync(c, comandaId, dados, tpEmis: 1); }
+            catch (NumeracaoNaoConfigurada e) { return new("ERRO", Mensagem: e.Message); }
             var r = await EnviarAsync(c, id, ct);
 
             if (r.Situacao == "VERIFICAR")
@@ -194,6 +198,11 @@ public sealed class NfceService(Db db, IOptionsMonitor<NfceOptions> opcoes, ILog
                 new { cnpj = d.Emit.Cnpj, serie = d.Serie, amb }, tx);
             if (atual is null)
             {
+                // Em produção nunca começar uma série do zero automaticamente (a série 1 é usada pelo Forms)
+                if (d.Ambiente == 1)
+                    throw new NumeracaoNaoConfigurada(
+                        $"Numeração da série {d.Serie} em PRODUÇÃO não está cadastrada (tabela nfce_numeracao). " +
+                        "A série 1 é usada pelo sistema antigo; use a série 2 ou cadastre o último número usado antes de emitir.");
                 await c.ExecuteAsync("insert into nfce_numeracao (cnpj, serie, ambiente, ultimo_numero) values (:cnpj, :serie, :amb, 0)",
                     new { cnpj = d.Emit.Cnpj, serie = d.Serie, amb }, tx);
                 atual = 0;
