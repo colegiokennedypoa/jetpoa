@@ -85,7 +85,7 @@ As mesmas chaves também podem vir por variável de ambiente. Valor vazio no arq
   | Administrador | tudo, inclusive Usuários e Implantação |
   | Gerente | tudo menos Usuários e Implantação: relatórios, produtos, impressoras, eventos, estoque (entrada, perda, ajuste, inventário), cancelar comanda com itens, cancelar/inutilizar NFC-e |
   | Caixa | check-in, comandas (abrir, lançar, fechar, cancelar item), clientes, ver produção/fila, emitir NFC-e, ver estoque |
-  | Garçom | ver comandas e lançar itens |
+  | Garçom | ver comandas e lançar itens; abrir comanda pela portaria (check-in/check-out) e cadastrar clientes, como o Check-in |
   | Check-in | portaria (check-in/check-out) e clientes |
 
   As permissões ficam em `src/JetPoa.Api/Auth/Permissoes.cs`.

@@ -50,7 +50,8 @@ public static class Permissoes
             ComandaVer, ComandaAbrir, ComandaLancar, ComandaFechar, ItemCancelar, Checkin,
             ClientesVer, ClientesEditar, ProdutosVer, ProducaoVer, FiscalVer, FiscalEmitir, EstoqueVer,
         ],
-        "Garçom" => [ComandaVer, ComandaLancar, ProdutosVer],
+        // Garçom também abre comanda pela portaria (check-in), como o perfil Check-in
+        "Garçom" => [ComandaVer, ComandaLancar, ProdutosVer, Checkin, ClientesVer, ClientesEditar],
         "Check-in" => [Checkin, ClientesVer, ClientesEditar],
         _ => [],
     };
