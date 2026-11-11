@@ -79,4 +79,5 @@ Se algo impedir a operação no D0:
 | Configuração e segredos | `C:\Projeto\certificado\52822987000123.conf` (fora do Git) |
 | Certificado A1 | `C:\Projeto\certificado\52822987000123.pfx` |
 | Banco | Oracle XE `192.168.0.109:1521/XE`, esquema `BISTRO` (o Forms continua no `ADMINISTRATIVO`) |
-| Scripts do banco | `db\00` a `db\07` (ordem no README) |
+| Scripts do banco | `db\00` a `db\09` (ordem no README) |
+| Guia do desenvolvedor | [`docs\03-guia-desenvolvedor.md`](03-guia-desenvolvedor.md) |

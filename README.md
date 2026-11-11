@@ -2,6 +2,8 @@
 
 Substitui o sistema Forms 6i do bistrô. Análise e proposta: [docs/01-analise-e-proposta.md](docs/01-analise-e-proposta.md).
 
+> **Vai continuar o desenvolvimento?** Comece por [docs/03-guia-desenvolvedor.md](docs/03-guia-desenvolvedor.md): ambiente, mapa do código, regras que não podem ser quebradas, convenções e pendências.
+
 ## Estrutura
 | Pasta | Conteúdo |
 |---|---|
@@ -18,6 +20,7 @@ Substitui o sistema Forms 6i do bistrô. Análise e proposta: [docs/01-analise-e
 6. `db/04_fase3_fechamento.sql`: como BISTRO (fechamento, descontos, isenções, pagamentos)
 7. `db/05_fase4_nfce.sql`: como BISTRO (emitente, numeração, NFC-e, inutilização, impressora do caixa)
 8. `db/06_numeracao_por_ambiente.sql` e `db/07_fase5_checkin_estoque.sql`: como BISTRO
+9. `db/08_comanda_exige_cliente.sql` e `db/09_login_senha.sql`: como BISTRO
 
 ## Check-in, estoque e relatórios (Fase 5)
 - **Check-in (portaria TERRA / RIO):** cada aparelho lembra a sua portaria.
