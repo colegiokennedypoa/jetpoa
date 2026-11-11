@@ -11,6 +11,9 @@ DefaultTypeMap.MatchNamesWithUnderscores = true;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Segredos locais (fora do Git): conexão, certificado A1 e CSC
+builder.Configuration.AddArquivoConf(builder.Configuration["ArquivoConfiguracao"]);
+
 builder.Services.AddSingleton<Db>();
 builder.Services.AddSingleton<ImpressaoProducao>();
 builder.Services.Configure<JetPoa.Api.Fiscal.NfceOptions>(builder.Configuration.GetSection("Nfce"));

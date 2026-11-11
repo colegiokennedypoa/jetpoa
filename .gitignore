@@ -490,3 +490,4 @@ publish/
 *.p12
 appsettings.*.local.json
 
+*.conf

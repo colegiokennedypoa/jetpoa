@@ -21,14 +21,17 @@ Substitui o sistema Forms 6i do bistrô. Análise e proposta: [docs/01-analise-e
 ## NFC-e (Fase 4)
 Emissão direta com a SEFAZ-RS (modelo 65, layout 4.00), **sem o Tomcat/AIOWS**: o XML é montado, assinado e transmitido pela própria API.
 
-**Configuração** (variáveis de ambiente do serviço; nunca no Git):
-```powershell
-$env:Nfce__CertificadoArquivo = "C:\caminho\seguro\certificado-a1.pfx"
-$env:Nfce__CertificadoSenha   = "<senha do pfx>"
-$env:Nfce__CscId              = "<ID do CSC, ex.: 1>"
-$env:Nfce__Csc                = "<código CSC da SEFAZ-RS>"
-$env:Nfce__Ambiente           = "2"   # 2 = homologação (testes)  ·  1 = produção
+**Configuração:** fica no arquivo local `C:\Projeto\certificado\52822987000123.conf`, ao lado do certificado e **fora do Git**. A API lê esse arquivo na inicialização (caminho em `appsettings.json` → `ArquivoConfiguracao`). Formato `Chave=Valor`, onde `__` separa os níveis:
+```ini
+ConnectionStrings__Bistro=User Id=bistro;Password=...;Data Source=192.168.0.109:1521/XE;
+Nfce__Ambiente=2                 # 2 = homologação (testes) · 1 = produção
+Nfce__Serie=2
+Nfce__CertificadoArquivo=C:\Projeto\certificado\52822987000123.pfx
+Nfce__CertificadoSenha=...
+Nfce__CscId=1
+Nfce__Csc=...
 ```
+As mesmas chaves também podem vir por variável de ambiente. Valor vazio no arquivo não sobrescreve.
 - **Série 2**: o sistema novo numera na série 2 para não colidir com o Forms (série 1) durante a operação em paralelo.
 - **Primeiro uso:** rodar em **homologação** (`Ambiente = 2`), emitir algumas notas, conferir na tela **Fiscal** e só então passar para produção.
 - **Fluxo:** ao fechar a comanda, a NFC-e é emitida e o DANFE sai na impressora do setor **CAIXA** (configurar o IP na tela Produção). Falha fiscal **não** desfaz o fechamento: a comanda aparece em "Comandas fechadas sem NFC-e" na tela Fiscal.
@@ -64,8 +67,7 @@ O sistema novo **só grava no esquema BISTRO**. O `ADMINISTRATIVO` (Forms) é ap
 
 ## Rodar em desenvolvimento
 ```powershell
-# conexão (não fica salva em arquivo)
-$env:ConnectionStrings__Bistro = "User Id=bistro;Password=<senha>;Data Source=192.168.0.109:1521/XE;"
+# a conexão e os segredos vêm de C:\Projeto\certificado\52822987000123.conf
 dotnet run --project src/JetPoa.Api        # API em http://localhost:5080  (Swagger em /swagger)
 cd web; npm run dev                        # front em http://localhost:5173 (proxy /api → 5080)
 ```
