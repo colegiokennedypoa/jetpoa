@@ -281,7 +281,7 @@ export const api = {
     novoCliente: { nome: string; cpf: string | null; celular: string | null; email: string | null; sexo: string | null; aceitaComunicacao: boolean } | null
     identificacao: string | null; observacao: string | null
   }) => req<CheckinResultado>('/api/checkin', { method: 'POST', body: JSON.stringify(i) }),
-  checkout: (numero: number) => req<{ numero: number; cliente: string; situacao: string; total: number }>('/api/checkout', { method: 'POST', body: JSON.stringify({ numero }) }),
+  checkout: (numero: number) => req<{ numero: number; cliente: string; situacao: string; total: number; semConsumo?: boolean }>('/api/checkout', { method: 'POST', body: JSON.stringify({ numero }) }),
   presentes: () => req<{ entrada: string; quantidade: number }[]>('/api/checkin/presentes'),
 
   estoque: (abaixoMinimo = false) => req<ItemEstoque[]>(`/api/estoque?abaixoMinimo=${abaixoMinimo}`),

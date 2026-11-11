@@ -27,7 +27,9 @@ Substitui o sistema Forms 6i do bistrô. Análise e proposta: [docs/01-analise-e
   - Busca o cliente por CPF, celular ou nome, cadastra na hora sem duplicar (CPF ou celular) ou usa só um nome.
   - Abre a comanda pelo número da pulseira e **lança as taxas do evento do dia**: estacionamento (terra), embarque (rio) e couvert se a entrada for antes do fim da janela.
   - As isenções por categoria do cliente (VIP, sócio…) são aplicadas no fechamento.
-- **Check-out:** registra a saída e **bloqueia** se a comanda ainda estiver aberta, encaminhando ao caixa.
+- **Check-out:** registra a saída.
+  - Comanda aberta **sem nenhum item**: é encerrada automaticamente (cancelada, motivo "Saída sem consumo") e a pessoa sai sem passar no caixa.
+  - Comanda aberta com consumo ou com taxas do evento: a saída é **bloqueada** e a pessoa é encaminhada ao caixa.
 - **Eventos:** aba Eventos no Check-in, com data, taxa de terra, taxa de rio e couvert com horário. Substitui `TB_BAR_EVENTO`/`TB_BAR_COUVER`.
 - **Estoque:**
   - baixa automática no fechamento (o kit baixa os componentes, ex.: COMBO 6 HEINEKEN baixa 6 Heineken);

@@ -111,7 +111,9 @@ function Saida({ onMsg }: { onMsg: (m: Msg) => void }) {
     e.preventDefault()
     try {
       const r = await api.checkout(Number(numero))
-      onMsg({ tipo: 'ok', texto: `Saída registrada: comanda ${r.numero} (${r.cliente}) · ${r.situacao === 'F' ? `paga ${brl(r.total)}` : 'cancelada'}` })
+      onMsg({ tipo: 'ok', texto: r.semConsumo
+        ? `Saída liberada: comanda ${r.numero} (${r.cliente}) sem consumo, encerrada automaticamente.`
+        : `Saída registrada: comanda ${r.numero} (${r.cliente}) · ${r.situacao === 'F' ? `paga ${brl(r.total)}` : 'cancelada'}` })
       setNumero('')
     } catch (err) { onMsg({ tipo: 'erro', texto: (err as Error).message }) }
   }

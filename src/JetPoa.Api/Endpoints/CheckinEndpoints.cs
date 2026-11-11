@@ -144,8 +144,9 @@ public static class CheckinEndpoints
             });
         });
 
-        // Check-out: registra a saída. Avisa se a comanda ainda está aberta (cliente precisa passar no caixa).
-        g.MapPost("/checkout", async (Db db, CheckoutInput i, CancellationToken ct) =>
+        // Check-out: registra a saída. Comanda aberta SEM nenhum item é encerrada aqui mesmo (não precisa ir ao caixa);
+        // com consumo (ou taxas do evento) continua bloqueada e é encaminhada ao caixa.
+        g.MapPost("/checkout", async (ClaimsPrincipal user, Db db, CheckoutInput i, CancellationToken ct) =>
         {
             using var c = await db.OpenAsync(ct);
             var com = await c.QueryFirstOrDefaultAsync<(decimal Id, string Situacao, decimal? Total, string? Nome)>("""
@@ -158,6 +159,26 @@ public static class CheckinEndpoints
             if (com == default) return Results.NotFound(new { erro = $"Nenhuma comanda {i.Numero} pendente de saída." });
             if (com.Situacao == "A")
             {
+                // sem consumo: encerra (cancela) e libera. Condição no próprio update evita corrida com um lançamento simultâneo.
+                using (var tx = c.BeginTransaction())
+                {
+                    var encerrou = await c.ExecuteAsync("""
+                        update comanda set situacao = 'C', fechada_em = sysdate, fechada_por = :usr, valor_total = 0,
+                               motivo_cancelamento = 'Saída sem consumo', saida_em = sysdate
+                         where id = :id and situacao = 'A'
+                           and not exists (select 1 from comanda_item i where i.comanda_id = comanda.id and i.situacao = 'A')
+                        """, new { id = com.Id, usr = user.Id() }, tx);
+                    if (encerrou == 1)
+                    {
+                        await c.ExecuteAsync("""
+                            insert into auditoria (usuario_id, entidade, entidade_id, acao, detalhe)
+                            values (:usr, 'COMANDA', :id, 'CANCELAMENTO', :det)
+                            """, new { usr = user.Id(), id = ((long)com.Id).ToString(),
+                                      det = """{"motivo":"Saída sem consumo","origem":"CHECKOUT"}""" }, tx);
+                        tx.Commit();
+                        return Results.Ok(new { numero = i.Numero, cliente = com.Nome, situacao = "C", total = 0m, semConsumo = true });
+                    }
+                }
                 var total = await c.ExecuteScalarAsync<decimal>(
                     "select nvl(sum(quantidade * preco_unitario), 0) from comanda_item where comanda_id = :id and situacao = 'A'", new { id = com.Id });
                 return Results.UnprocessableEntity(new { erro = $"Comanda {i.Numero} ({com.Nome}) ainda está ABERTA com {total:C}. Encaminhar ao caixa." });
