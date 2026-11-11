@@ -156,6 +156,15 @@ public static class FiscalEndpoints
                        and situacao in ('AUTORIZADA','CONTINGENCIA','CANCELADA','SUBSTITUIDA','PENDENTE')
                     """, new { serie, amb = o.CurrentValue.Ambiente.ToString(), ini = i.Inicial, fim = i.Final });
                 if (usados > 0) return Results.UnprocessableEntity(new { erro = "A faixa contém números já usados em notas válidas." });
+                if (o.CurrentValue.Ambiente == 1)
+                {
+                    // notas autorizadas pelo sistema antigo (Forms) na mesma série
+                    var legado = await c.ExecuteScalarAsync<int>("""
+                        select count(*) from administrativo.tb_bar_pedido_nfce
+                         where modelo = '65' and to_number(serie) = :serie and numero_nff between :ini and :fim and protocolo is not null
+                        """, new { serie, ini = i.Inicial, fim = i.Final });
+                    if (legado > 0) return Results.UnprocessableEntity(new { erro = $"A faixa contém {legado} nota(s) autorizada(s) pelo sistema antigo." });
+                }
             }
             return Results.Ok(await nfce.InutilizarAsync(i.Serie ?? o.CurrentValue.Serie, i.Inicial, i.Final, just, i.UsuarioId, ct));
         });

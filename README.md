@@ -32,7 +32,11 @@ Nfce__CscId=1
 Nfce__Csc=...
 ```
 As mesmas chaves também podem vir por variável de ambiente. Valor vazio no arquivo não sobrescreve.
-- **Série 2**: o sistema novo numera na série 2 para não colidir com o Forms (série 1) durante a operação em paralelo.
+- **Série 1 (decisão do JetPOA):** o sistema novo continua a série 1 do Forms. Em **produção**, o próximo número é sempre `maior(último do sistema novo, último do Forms) + 1`, lido de `ADMINISTRATIVO.TB_BAR_PEDIDO_NFCE` (hoje: **1213**). Em homologação a numeração é separada.
+- **Virada para produção:** os dois sistemas **não podem emitir NFC-e de produção ao mesmo tempo**. O Forms numera só pela própria tabela e reutilizaria números já usados pelo novo. Antes de ligar `Nfce__Ambiente=1`:
+  1. parar de fechar comandas no Forms, porque a tela TEN10550 chama `SOURCE.PK_NFCE.GERANFFJETPOA` a cada fechamento;
+  2. desativar o job 401 do Forms (`pk_nfce.job`, a cada 30 min), como DBA: `exec dbms_job.broken(401, true);` e `commit;`.
+- **Pendência herdada:** o Forms tem **583 números da série 1 sem autorização**, que precisam ser inutilizados (tela Fiscal → Inutilizar). A tela recusa faixas que contenham notas autorizadas pelo Forms.
 - **Primeiro uso:** rodar em **homologação** (`Ambiente = 2`), emitir algumas notas, conferir na tela **Fiscal** e só então passar para produção.
 - **Fluxo:** ao fechar a comanda, a NFC-e é emitida e o DANFE sai na impressora do setor **CAIXA** (configurar o IP na tela Produção). Falha fiscal **não** desfaz o fechamento: a comanda aparece em "Comandas fechadas sem NFC-e" na tela Fiscal.
 - **Antes de numerar**, o sistema valida NCM, CFOP, CSOSN e CST PIS/COFINS de cada produto, incluindo CFOP × CSOSN (500 → 5405; 102 → 5102). Produto inválido não consome número.

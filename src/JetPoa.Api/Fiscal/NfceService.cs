@@ -10,8 +10,6 @@ namespace JetPoa.Api.Fiscal;
 /// <param name="Nova">false quando a nota já existia (não reimprimir o DANFE automaticamente).</param>
 public sealed record NfceResultado(string Situacao, long? Id = null, int? Numero = null, string? Chave = null, string? Mensagem = null, bool Nova = true);
 
-public sealed class NumeracaoNaoConfigurada(string msg) : Exception(msg);
-
 /// <summary>Emissão, transmissão, contingência, cancelamento e inutilização da NFC-e.</summary>
 public sealed class NfceService(Db db, IOptionsMonitor<NfceOptions> opcoes, ILogger<NfceService> log)
 {
@@ -114,9 +112,7 @@ public sealed class NfceService(Db db, IOptionsMonitor<NfceOptions> opcoes, ILog
                 return new("DADOS_FISCAIS", Mensagem: "Produtos sem dados fiscais válidos: " + string.Join(" | ", erros));
             if (dados is null) return new("SEM_NOTA", Mensagem: "Nenhum item tributável (somente serviços/taxas).");
 
-            long id;
-            try { id = await GerarEGravarAsync(c, comandaId, dados, tpEmis: 1); }
-            catch (NumeracaoNaoConfigurada e) { return new("ERRO", Mensagem: e.Message); }
+            var id = await GerarEGravarAsync(c, comandaId, dados, tpEmis: 1);
             var r = await EnviarAsync(c, id, ct);
 
             if (r.Situacao == "VERIFICAR")
@@ -198,15 +194,13 @@ public sealed class NfceService(Db db, IOptionsMonitor<NfceOptions> opcoes, ILog
                 new { cnpj = d.Emit.Cnpj, serie = d.Serie, amb }, tx);
             if (atual is null)
             {
-                // Em produção nunca começar uma série do zero automaticamente (a série 1 é usada pelo Forms)
-                if (d.Ambiente == 1)
-                    throw new NumeracaoNaoConfigurada(
-                        $"Numeração da série {d.Serie} em PRODUÇÃO não está cadastrada (tabela nfce_numeracao). " +
-                        "A série 1 é usada pelo sistema antigo; use a série 2 ou cadastre o último número usado antes de emitir.");
                 await c.ExecuteAsync("insert into nfce_numeracao (cnpj, serie, ambiente, ultimo_numero) values (:cnpj, :serie, :amb, 0)",
                     new { cnpj = d.Emit.Cnpj, serie = d.Serie, amb }, tx);
                 atual = 0;
             }
+            // Produção: continua a numeração do sistema antigo (Forms) na mesma série — nunca reutiliza número dele
+            if (d.Ambiente == 1)
+                atual = Math.Max(atual.Value, await UltimoNumeroLegadoAsync(c, d.Emit.Cnpj, d.Serie, tx));
             numero = atual.Value + 1;
             await c.ExecuteAsync("update nfce_numeracao set ultimo_numero = :numero where cnpj = :cnpj and serie = :serie and ambiente = :amb",
                 new { numero, cnpj = d.Emit.Cnpj, serie = d.Serie, amb }, tx);
@@ -225,6 +219,13 @@ public sealed class NfceService(Db db, IOptionsMonitor<NfceOptions> opcoes, ILog
         tx.Commit();
         return id;
     }
+
+    /// <summary>Maior número já usado pelo sistema antigo (ADMINISTRATIVO.TB_BAR_PEDIDO_NFCE) na série.</summary>
+    private static async Task<int> UltimoNumeroLegadoAsync(IDbConnection c, string cnpj, int serie, IDbTransaction tx) =>
+        await c.ExecuteScalarAsync<int>("""
+            select nvl(max(numero_nff), 0) from administrativo.tb_bar_pedido_nfce
+             where cnpj_emitente = :cnpj and modelo = '65' and to_number(serie) = :serie
+            """, new { cnpj, serie }, tx);
 
     /// <summary>Monta + assina + QR Code. Público para testes (aceita certificado externo).</summary>
     public (string Xml, string Chave, decimal VNF) MontarAssinado(NfceXml.Dados d, X509Certificate2? cert = null, string? cscId = null, string? csc = null)
