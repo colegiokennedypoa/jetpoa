@@ -214,9 +214,11 @@ function DetalheComanda({ id, onMudou, onMsg, onEncerrada }: {
         ) : <span className="tag ok">{c.situacao === 'F' ? 'Fechada' : 'Cancelada'}</span>}
       </div>
 
-      {c.clienteId == null && c.situacao === 'A' && (
+      {c.clienteId == null && c.situacao !== 'C' && (
         <div className="cartao alerta-box">
-          <b>Comanda sem cliente cadastrado.</b> Selecione ou cadastre o cliente para poder fechar.
+          <b>Comanda sem cliente cadastrado.</b> {c.situacao === 'A'
+            ? 'Selecione ou cadastre o cliente para poder fechar.'
+            : 'Comanda fechada antes da regra: vincule o cliente para regularizar.'}
           <BuscaCliente cliente={null} onCliente={async cli => {
             if (!cli) return
             try { await api.vincularCliente(c.id, cli.id); onMsg({ tipo: 'ok', texto: `Cliente ${cli.nome} vinculado à comanda ${c.numero}.` }); carregar(); onMudou() }

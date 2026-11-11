@@ -104,6 +104,10 @@ public static class FechamentoEndpoints
             if (ctx is null) return Results.NotFound(new { erro = "Comanda não encontrada." });
             if (ctx.Situacao != "A") return Erro("Comanda não está aberta.");
             if (ctx.Itens.Count == 0) return Erro("Comanda sem itens. Use cancelar comanda.");
+            // regra do JetPOA: comanda só fecha com cliente cadastrado
+            // (a constraint do banco só é reavaliada quando cliente_id muda, por isso a checagem aqui)
+            if (await c.ExecuteScalarAsync<int>("select count(*) from comanda where id = :id and cliente_id is null", new { id }, tx) > 0)
+                return Erro("Vincule um cliente cadastrado à comanda antes de fechar.");
 
             // operador
             var operador = await UsuarioEndpoints.AutenticarAsync(c, i.OperadorId, i.OperadorPin, tx);

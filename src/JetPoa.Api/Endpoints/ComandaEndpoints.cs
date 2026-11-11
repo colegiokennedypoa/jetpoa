@@ -56,6 +56,7 @@ public static class ComandaEndpoints
     public sealed record LancarItem(long ProdutoId, decimal Quantidade, string? Observacao);
     public sealed record LancarInput(long? GarcomId, string? Origem, List<LancarItem> Itens);
     public sealed record CancelarItemInput(string Motivo);
+    public sealed record VincularClienteInput(long ClienteId);
 
     private sealed class ProdutoLanc
     {
@@ -195,6 +196,24 @@ public static class ComandaEndpoints
                  where id = :id and situacao = 'A'
                 """, new { id, cliente_id = i.ClienteId, identificacao = Limpo(i.Identificacao), entrada, area_id = i.AreaId, observacao = Limpo(i.Observacao) });
             return n == 0 ? Results.NotFound(new { erro = "Comanda não encontrada ou não está aberta." }) : Results.NoContent();
+        });
+
+        // Vincula cliente: comanda aberta (troca) ou comanda já fechada que ficou sem cliente (regularização)
+        g.MapPost("/{id:long}/cliente", async (Db db, long id, VincularClienteInput i, CancellationToken ct) =>
+        {
+            using var c = await db.OpenAsync(ct);
+            if (await c.ExecuteScalarAsync<string?>("select ativo from cliente where id = :cid", new { cid = i.ClienteId }) != "S")
+                return Erro("Cliente não encontrado ou inativo.");
+            var n = await c.ExecuteAsync("""
+                update comanda set cliente_id = :cid
+                 where id = :id and (situacao = 'A' or cliente_id is null)
+                """, new { id, cid = i.ClienteId });
+            if (n == 0) return Erro("Comanda fechada já tem cliente: não pode ser alterada.");
+            await c.ExecuteAsync("""
+                insert into auditoria (entidade, entidade_id, acao, detalhe)
+                values ('COMANDA', :eid, 'VINCULAR_CLIENTE', :det)
+                """, new { eid = id.ToString(), det = $"{{\"clienteId\":{i.ClienteId}}}" });
+            return Results.NoContent();
         });
 
         // Lança itens e gera um envio de produção por setor que imprime

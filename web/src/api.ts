@@ -195,7 +195,7 @@ export const api = {
     return r.ok ? r.json() : null
   },
   vincularCliente: (comandaId: number, clienteId: number) =>
-    req<void>(`/api/comandas/${comandaId}`, { method: 'PATCH', body: JSON.stringify({ clienteId }) }),
+    req<void>(`/api/comandas/${comandaId}/cliente`, { method: 'POST', body: JSON.stringify({ clienteId }) }),
   criarCliente: (c: ClienteInput) => req<{ id: number }>('/api/clientes', { method: 'POST', body: JSON.stringify(c) }),
   atualizarCliente: (id: number, c: ClienteInput) =>
     req<void>(`/api/clientes/${id}`, { method: 'PUT', body: JSON.stringify(c) }),

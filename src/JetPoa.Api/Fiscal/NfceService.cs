@@ -114,6 +114,8 @@ public sealed class NfceService(Db db, IOptionsMonitor<NfceOptions> opcoes, ILog
 
             var id = await GerarEGravarAsync(c, comandaId, dados, tpEmis: 1);
             var r = await EnviarAsync(c, id, ct);
+            if (r.Situacao == "REJEITADA" && r.Mensagem?.StartsWith("539") == true)
+                r = await RenumerarEEnviarAsync(c, id, ct);
 
             if (r.Situacao == "VERIFICAR")
             {
@@ -186,25 +188,7 @@ public sealed class NfceService(Db db, IOptionsMonitor<NfceOptions> opcoes, ILog
     {
         using var tx = c.BeginTransaction();
         var numero = d.Numero;
-        if (numero == 0)
-        {
-            var amb = d.Ambiente.ToString();
-            var atual = await c.ExecuteScalarAsync<int?>(
-                "select ultimo_numero from nfce_numeracao where cnpj = :cnpj and serie = :serie and ambiente = :amb for update",
-                new { cnpj = d.Emit.Cnpj, serie = d.Serie, amb }, tx);
-            if (atual is null)
-            {
-                await c.ExecuteAsync("insert into nfce_numeracao (cnpj, serie, ambiente, ultimo_numero) values (:cnpj, :serie, :amb, 0)",
-                    new { cnpj = d.Emit.Cnpj, serie = d.Serie, amb }, tx);
-                atual = 0;
-            }
-            // Produção: continua a numeração do sistema antigo (Forms) na mesma série — nunca reutiliza número dele
-            if (d.Ambiente == 1)
-                atual = Math.Max(atual.Value, await UltimoNumeroLegadoAsync(c, d.Emit.Cnpj, d.Serie, tx));
-            numero = atual.Value + 1;
-            await c.ExecuteAsync("update nfce_numeracao set ultimo_numero = :numero where cnpj = :cnpj and serie = :serie and ambiente = :amb",
-                new { numero, cnpj = d.Emit.Cnpj, serie = d.Serie, amb }, tx);
-        }
+        if (numero == 0) numero = await ProximoNumeroAsync(c, d.Emit.Cnpj, d.Serie, d.Ambiente, 0, tx);
         var cNF = string.IsNullOrEmpty(d.CodigoNumerico) ? NfceXml.CodigoNumericoAleatorio(numero) : d.CodigoNumerico;
         var dados = d with { Numero = numero, CodigoNumerico = cNF, TpEmis = tpEmis };
         var (xml, chave, vNF) = MontarAssinado(dados);
@@ -218,6 +202,66 @@ public sealed class NfceService(Db db, IOptionsMonitor<NfceOptions> opcoes, ILog
                       vNF, dest = d.CpfCnpjDest, xml = new Clob(xml) }, tx);
         tx.Commit();
         return id;
+    }
+
+    /// <summary>
+    /// Reserva o próximo número da série (dentro da transação, com lock).
+    /// Nunca devolve número &lt;= <paramref name="jaUsado"/> (ex.: número que a SEFAZ acusou como duplicado)
+    /// e, em produção, nunca reutiliza número do sistema antigo (Forms).
+    /// </summary>
+    private static async Task<int> ProximoNumeroAsync(IDbConnection c, string cnpj, int serie, int ambiente, int jaUsado, IDbTransaction tx)
+    {
+        var amb = ambiente.ToString();
+        var atual = await c.ExecuteScalarAsync<int?>(
+            "select ultimo_numero from nfce_numeracao where cnpj = :cnpj and serie = :serie and ambiente = :amb for update",
+            new { cnpj, serie, amb }, tx);
+        if (atual is null)
+        {
+            await c.ExecuteAsync("insert into nfce_numeracao (cnpj, serie, ambiente, ultimo_numero) values (:cnpj, :serie, :amb, 0)",
+                new { cnpj, serie, amb }, tx);
+            atual = 0;
+        }
+        var ultimo = Math.Max(atual.Value, jaUsado);
+        if (ambiente == 1) ultimo = Math.Max(ultimo, await UltimoNumeroLegadoAsync(c, cnpj, serie, tx));
+        var numero = ultimo + 1;
+        await c.ExecuteAsync("update nfce_numeracao set ultimo_numero = :numero where cnpj = :cnpj and serie = :serie and ambiente = :amb",
+            new { numero, cnpj, serie, amb }, tx);
+        return numero;
+    }
+
+    /// <summary>
+    /// Rejeição 539 (número já usado na SEFAZ com outra chave): a nota recebe o próximo número livre
+    /// e é reenviada. Tenta até 3 vezes.
+    /// </summary>
+    private async Task<NfceResultado> RenumerarEEnviarAsync(IDbConnection c, long id, CancellationToken ct)
+    {
+        NfceResultado r = new("REJEITADA");
+        for (var tentativa = 0; tentativa < 3; tentativa++)
+        {
+            var n = (await ObterAsync(c, id))!;
+            if (n.Situacao != "REJEITADA" || n.CStat != "539" || n.ComandaId is null) return r;
+            var com = await c.QuerySingleAsync<ComandaRow>(
+                "select situacao, consumo_interno, valor_total, cpf_cnpj_nota from comanda where id = :id", new { id = n.ComandaId });
+
+            using (var tx = c.BeginTransaction())
+            {
+                var novo = await ProximoNumeroAsync(c, n.Cnpj, n.Serie, int.Parse(n.Ambiente), n.Numero, tx);
+                var (dados, erros) = await CarregarDadosAsync(c, n.ComandaId.Value, com, novo, n.Serie,
+                    NfceXml.CodigoNumericoAleatorio(novo), DateTime.Now, int.Parse(n.TpEmis), null);
+                if (erros.Count > 0 || dados is null) { tx.Rollback(); return new("DADOS_FISCAIS", id, n.Numero, Mensagem: string.Join(" | ", erros)); }
+                var (xml, chave, vNF) = MontarAssinado(dados);
+                await c.ExecuteAsync("""
+                    update nfce set numero = :novo, chave = :chave, xml = :xml, valor_total = :vNF, emitida_em = :emissao,
+                           situacao = 'PENDENTE', x_motivo = 'Renumerada: número ' || :antigo || ' já usado na SEFAZ (539)'
+                     where id = :id
+                    """, new { id, novo, chave, xml = new Clob(xml), vNF, emissao = dados.Emissao, antigo = n.Numero }, tx);
+                tx.Commit();
+                log.LogWarning("NFC-e {Id}: número {Antigo} já usado na SEFAZ (539); renumerada para {Novo}.", id, n.Numero, novo);
+            }
+            r = await EnviarAsync(c, id, ct);
+            if (r.Situacao != "REJEITADA") return r;
+        }
+        return r;
     }
 
     /// <summary>Maior número já usado pelo sistema antigo (ADMINISTRATIVO.TB_BAR_PEDIDO_NFCE) na série.</summary>
@@ -330,6 +374,8 @@ public sealed class NfceService(Db db, IOptionsMonitor<NfceOptions> opcoes, ILog
             var n = await ObterAsync(c, id);
             if (n is null) return new("ERRO", Mensagem: "Nota não encontrada.");
             if (n.Situacao != "REJEITADA" || n.ComandaId is null) return new("ERRO", Mensagem: "Só notas rejeitadas podem ser reenviadas.");
+            // 539: o número já existe na SEFAZ com outra chave → reenviar com o mesmo número nunca passa; renumera
+            if (n.CStat == "539") return await RenumerarEEnviarAsync(c, id, ct);
             var com = await c.QuerySingleAsync<ComandaRow>(
                 "select situacao, consumo_interno, valor_total, cpf_cnpj_nota from comanda where id = :id", new { id = n.ComandaId });
             var (dados, erros) = await CarregarDadosAsync(c, n.ComandaId.Value, com, n.Numero, n.Serie, n.CodigoNumerico, DateTime.Now, int.Parse(n.TpEmis), null);
@@ -340,7 +386,8 @@ public sealed class NfceService(Db db, IOptionsMonitor<NfceOptions> opcoes, ILog
                 update nfce set xml = :xml, chave = :chave, valor_total = :vNF, emitida_em = :emissao, situacao = 'PENDENTE', x_motivo = null
                  where id = :id
                 """, new { id, xml = new Clob(xml), chave, vNF, emissao = dados.Emissao });
-            return await EnviarAsync(c, id, ct);
+            var r = await EnviarAsync(c, id, ct);
+            return r.Situacao == "REJEITADA" && r.Mensagem?.StartsWith("539") == true ? await RenumerarEEnviarAsync(c, id, ct) : r;
         }
         finally { _trava.Release(); }
     }
