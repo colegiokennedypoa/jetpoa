@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { api, brl, gravarLocal, lerLocal, P, type Area, type Cliente, type Evento, type ProdutoResumo } from '../api'
 import BuscaCliente from '../components/BuscaCliente'
 import { useSessao } from '../sessao'
@@ -61,7 +61,9 @@ function Entrada({ entrada, onMsg }: { entrada: 'T' | 'R'; onMsg: (m: Msg) => vo
 
   useEffect(() => { api.areas().then(setAreas).catch(() => {}) }, [])
 
-  const limpar = () => { setNumero(''); setCliente(null); setAreaId(null) }
+  const campoNumero = useRef<HTMLInputElement>(null)
+  // pronto para o próximo: limpa pulseira, área e cliente e volta o cursor para a pulseira
+  const limpar = () => { setNumero(''); setCliente(null); setAreaId(null); campoNumero.current?.focus() }
 
   const enviar = async (e: FormEvent) => {
     e.preventDefault()
@@ -83,7 +85,7 @@ function Entrada({ entrada, onMsg }: { entrada: 'T' | 'R'; onMsg: (m: Msg) => vo
     <form className="cartao" onSubmit={enviar}>
       <div className="grade">
         <label>Nº da pulseira / comanda*
-          <input className="numero-grande" value={numero} onChange={e => setNumero(e.target.value.replace(/\D/g, ''))} inputMode="numeric" required autoFocus />
+          <input ref={campoNumero} className="numero-grande" value={numero} onChange={e => setNumero(e.target.value.replace(/\D/g, ''))} inputMode="numeric" required autoFocus />
         </label>
         <label>Área
           <select value={areaId ?? ''} onChange={e => setAreaId(Number(e.target.value) || null)}>

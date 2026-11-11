@@ -18,6 +18,9 @@ export default function BuscaCliente({ cliente, onCliente, autoFocus }: {
   const [erro, setErro] = useState<string>()
   const [salvando, setSalvando] = useState(false)
 
+  // cliente escolhido (ou limpo pela tela após o check-in): a busca começa do zero
+  useEffect(() => { setBusca(''); setSugestoes([]); setNovo(false); setErro(undefined) }, [cliente])
+
   useEffect(() => {
     if (cliente || novo || busca.trim().length < 3) { setSugestoes([]); return }
     const t = setTimeout(() => api.clientes(busca).then(r => setSugestoes(r.filter(c => c.ativo === 'S').slice(0, 8))).catch(() => {}), 250)
