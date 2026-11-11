@@ -18,6 +18,7 @@ export default function Lancamento({ comandaId, origem, garcomFixo, onLancado }:
   const [carrinho, setCarrinho] = useState<ItemCarrinho[]>([])
   const [enviando, setEnviando] = useState(false)
   const [erro, setErro] = useState<string>()
+  const [aberto, setAberto] = useState(false)   // celular: pedido aberto sobre a tela (barra do rodapé)
 
   useEffect(() => {
     api.produtosVenda().then(setProdutos).catch(e => setErro(e.message))
@@ -44,13 +45,20 @@ export default function Lancamento({ comandaId, origem, garcomFixo, onLancado }:
   const alterarObs = (k: number, obs: string) => setCarrinho(c => c.map((x, i) => (i === k ? { ...x, observacao: obs } : x)))
 
   const total = carrinho.reduce((s, x) => s + x.preco * x.quantidade, 0)
+  const totalItens = carrinho.reduce((s, x) => s + x.quantidade, 0)
+  // quantidade já no pedido, para mostrar no botão do produto
+  const noPedido = useMemo(() => {
+    const m = new Map<number, number>()
+    carrinho.forEach(x => m.set(x.produtoId, (m.get(x.produtoId) ?? 0) + x.quantidade))
+    return m
+  }, [carrinho])
 
   const enviar = async () => {
     if (carrinho.length === 0) return
     setEnviando(true); setErro(undefined)
     try {
       const r = await api.lancar(comandaId, garcomId, origem, carrinho)
-      setCarrinho([]); setBusca('')
+      setCarrinho([]); setBusca(''); setAberto(false)
       onLancado(`${r.lancados} item(ns) lançados${r.envios.length ? ` · ${r.envios.length} envio(s) para produção` : ''}.`)
     } catch (e) {
       setErro((e as Error).message)
@@ -63,7 +71,7 @@ export default function Lancamento({ comandaId, origem, garcomFixo, onLancado }:
     <div className="lancamento">
       <div className="catalogo">
         <div className="filtros">
-          <input placeholder="Buscar produto…" value={busca} onChange={e => setBusca(e.target.value)} />
+          <input type="search" placeholder="Buscar produto…" value={busca} onChange={e => setBusca(e.target.value)} enterKeyHint="search" />
           {garcomFixo === undefined && (
             <select value={garcomId ?? ''} onChange={e => setGarcomId(e.target.value ? Number(e.target.value) : null)}>
               <option value="">Garçom…</option>
@@ -79,17 +87,23 @@ export default function Lancamento({ comandaId, origem, garcomFixo, onLancado }:
         </div>
         <div className="produtos-grade">
           {filtrados.map(p => (
-            <button key={p.id} className="produto-btn" onClick={() => adicionar(p)}>
+            <button key={p.id} className={noPedido.has(p.id) ? 'produto-btn no-pedido' : 'produto-btn'} onClick={() => adicionar(p)}>
               <span className="nome">{p.nome}</span>
               <span className="preco">{brl(p.precoVenda)}</span>
+              {noPedido.has(p.id) && <span className="qtd-badge">{noPedido.get(p.id)}</span>}
             </button>
           ))}
           {filtrados.length === 0 && <p className="vazio">Nenhum produto.</p>}
         </div>
       </div>
 
-      <div className="carrinho">
-        <h4>Novo pedido</h4>
+      {aberto && <div className="carrinho-fundo" onClick={() => setAberto(false)} />}
+      <div className={aberto ? 'carrinho aberto' : 'carrinho'}>
+        <button type="button" className="carrinho-topo" onClick={() => setAberto(a => !a)} disabled={carrinho.length === 0}>
+          <h4>Novo pedido{totalItens > 0 && ` · ${totalItens} ${totalItens === 1 ? 'item' : 'itens'}`}</h4>
+          {carrinho.length > 0 && <span className="so-celular">{aberto ? 'Fechar ▼' : 'Ver itens ▲'}</span>}
+        </button>
+        <div className="carrinho-itens">
         {carrinho.length === 0 && <p className="vazio">Toque nos produtos para adicionar.</p>}
         {carrinho.map((x, k) => (
           <div key={k} className="carrinho-item">
@@ -104,6 +118,7 @@ export default function Lancamento({ comandaId, origem, garcomFixo, onLancado }:
             <input placeholder="Observação (ex.: sem gelo)" value={x.observacao} onChange={e => alterarObs(k, e.target.value)} />
           </div>
         ))}
+        </div>
         {erro && <p className="erro">{erro}</p>}
         <button className="enviar" disabled={carrinho.length === 0 || enviando} onClick={enviar}>
           {enviando ? 'Enviando…' : `Enviar ${carrinho.length ? '· ' + brl(total) : ''}`}

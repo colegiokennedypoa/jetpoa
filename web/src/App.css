@@ -116,6 +116,23 @@ tr.inativo td { color: var(--muted); text-decoration: line-through; }
 .carrinho-item .qtd button { padding: 0.15em 0.6em; }
 .carrinho .enviar { padding: 0.7em; font-size: 1rem; font-weight: 600; }
 .carrinho .enviar:disabled { opacity: 0.5; cursor: default; }
+.lancamento > * { min-width: 0; }   /* chips/produtos não alargam a tela */
+.carrinho-topo {
+  display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; width: 100%;
+  background: transparent; color: var(--text); border: none; padding: 0; text-align: left; cursor: default;
+}
+.carrinho-topo:disabled { opacity: 1; }
+.carrinho-itens { display: flex; flex-direction: column; gap: 0.5rem; }
+.so-celular { display: none; }
+.carrinho-fundo { display: none; }
+.produto-btn { position: relative; }
+.produto-btn.no-pedido { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary) inset; }
+.qtd-badge {
+  position: absolute; top: 0.3rem; right: 0.3rem; min-width: 1.6em; height: 1.6em; padding: 0 0.35em;
+  border-radius: 999px; background: var(--primary); color: var(--primary-text);
+  font-size: 0.8rem; font-weight: 700; display: flex; align-items: center; justify-content: center;
+}
+.produto-btn .nome { padding-right: 1.8em; }
 
 /* Garçom */
 .garcom { max-width: 900px; margin: 0 auto; }
@@ -203,6 +220,46 @@ button:disabled { opacity: 0.5; cursor: default; }
   .topo nav { order: 3; width: 100%; flex-wrap: nowrap; overflow-x: auto; }
   .topo nav button { flex: 0 0 auto; }
   .chips { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 0.2rem; }
-  .chip { flex: 0 0 auto; }
-  .produtos-grade { grid-template-columns: repeat(2, 1fr); max-height: 45vh; }
+  .chip { flex: 0 0 auto; padding: 0.45em 0.95em; }
+
+  /* 16px evita o zoom automático do iPhone ao tocar num campo */
+  input, select, textarea { font-size: 16px; }
+  .filtros input:not([type=checkbox]) { min-width: 0; max-width: none; flex: 1 1 100%; }
+
+  /* Topo compacto */
+  .topo strong { font-size: 0.95rem; }
+  .usuario-logado { gap: 0.35rem; font-size: 0.85rem; min-width: 0; }
+  .usuario-logado small { display: none; }
+
+  /* Garçom / lançamento no celular: produtos em 2 colunas com a página rolando
+     e o pedido numa barra fixa no rodapé (abre por cima para ver/ajustar os itens) */
+  .garcom > .filtros { margin-bottom: 0.4rem; font-size: 0.9rem; }
+  .cabecalho-comanda { grid-template-columns: auto 1fr auto; gap: 0.6rem; padding: 0.5rem 0.6rem; }
+  .cabecalho-comanda .num { font-size: 1.15rem; padding: 0.25rem 0.5rem; }
+  .cabecalho-comanda h3 { font-size: 1rem; }
+  .cabecalho-comanda .total { font-size: 1.15rem; }
+  .cabecalho-comanda > button { grid-column: 1 / -1; padding: 0.4em; }
+  .lancamento { display: block; padding-bottom: 6rem; }
+  .produtos-grade { grid-template-columns: repeat(2, minmax(0, 1fr)); max-height: none; overflow: visible; gap: 0.5rem; }
+  .produto-btn { min-height: 76px; font-size: 0.9rem; padding: 0.6em; }
+  .carrinho {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+    border-radius: 14px 14px 0 0; border-bottom: none; box-shadow: 0 -4px 18px rgba(0, 0, 0, 0.18);
+    padding: 0.7rem 0.9rem calc(0.7rem + env(safe-area-inset-bottom)); max-height: 80vh;
+  }
+  .carrinho-topo { cursor: pointer; padding: 0.15rem 0; }
+  .carrinho-topo h4 { font-size: 1rem; }
+  .so-celular { display: inline; color: var(--primary); font-weight: 600; font-size: 0.9rem; }
+  .carrinho-itens { display: none; overflow-y: auto; }
+  .carrinho.aberto .carrinho-itens { display: flex; }
+  .carrinho .carrinho-itens .vazio { display: none; }
+  .carrinho .enviar { padding: 0.85em; font-size: 1.05rem; }
+  .carrinho-item .qtd button { padding: 0.35em 0.9em; font-size: 1.1rem; }
+  .carrinho-fundo { display: block; position: fixed; inset: 0; z-index: 19; background: rgba(0, 0, 0, 0.35); }
+
+  /* Check-in e formulários: alvos de toque largos */
+  .garcom .segmentado { flex: 1 1 100%; }
+  .garcom .segmentado button { padding: 0.65em 0.4em; }
+  .garcom .contador { margin-left: 0; }
+  .acoes > button { flex: 1 1 0; padding: 0.75em; }
 }
