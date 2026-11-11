@@ -144,10 +144,13 @@ public static class ComandaEndpoints
             if (i.Numero <= 0) return Erro("Informe o número da comanda.");
             var entrada = NormalizarEntrada(i.EntradaTipo);
             if (entrada is null) return Erro("Entrada deve ser T (Terra) ou R (Rio).");
-            if (i.ClienteId is null && string.IsNullOrWhiteSpace(i.Identificacao))
-                return Erro("Informe o cliente ou um nome para identificar a comanda.");
+            // regra do JetPOA: comanda só para cliente previamente cadastrado
+            if (i.ClienteId is null) return Erro("Selecione um cliente cadastrado (ou cadastre-o antes de abrir a comanda).");
 
             using var c = await db.OpenAsync(ct);
+            var clienteAtivo = await c.ExecuteScalarAsync<string?>("select ativo from cliente where id = :id", new { id = i.ClienteId });
+            if (clienteAtivo is null) return Erro("Cliente não encontrado.");
+            if (clienteAtivo != "S") return Erro("Cliente inativo.");
             var id = await c.ExecuteScalarAsync<long>("select sq_comanda.nextval from dual");
             try
             {
@@ -176,9 +179,15 @@ public static class ComandaEndpoints
             var entrada = i.EntradaTipo is null ? null : NormalizarEntrada(i.EntradaTipo);
             if (i.EntradaTipo is not null && entrada is null) return Erro("Entrada deve ser T (Terra) ou R (Rio).");
             using var c = await db.OpenAsync(ct);
+            if (i.ClienteId is not null &&
+                await c.ExecuteScalarAsync<string?>("select ativo from cliente where id = :id", new { id = i.ClienteId }) != "S")
+                return Erro("Cliente não encontrado ou inativo.");
+            var semCliente = await c.ExecuteScalarAsync<int>(
+                "select count(*) from comanda where id = :id and cliente_id is null", new { id });
+            if (semCliente > 0 && i.ClienteId is null) return Erro("Esta comanda está sem cliente: selecione um cliente cadastrado.");
             var n = await c.ExecuteAsync("""
                 update comanda
-                   set cliente_id = :cliente_id,
+                   set cliente_id = nvl(:cliente_id, cliente_id),
                        identificacao = :identificacao,
                        entrada_tipo = nvl(:entrada, entrada_tipo),
                        area_id = :area_id,

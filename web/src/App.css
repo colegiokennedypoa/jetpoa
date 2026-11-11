@@ -75,7 +75,11 @@ tr.inativo td { color: var(--muted); text-decoration: line-through; }
 .segmentado button.ativo { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
 .sugestoes { display: flex; flex-direction: column; gap: 0.2rem; margin-top: 0.3rem; }
 .sugestoes button { text-align: left; }
-.cliente-sel { display: flex; gap: 0.5rem; align-items: center; color: var(--text); }
+.cliente-sel { display: flex; gap: 0.5rem; align-items: center; color: var(--text); flex-wrap: wrap; }
+.campo { display: flex; flex-direction: column; gap: 0.3rem; }
+.campo .rotulo { font-size: 0.85rem; color: var(--muted); }
+.campo input { width: 100%; }
+.cadastro-rapido { border: 1px dashed var(--border); border-radius: 6px; padding: 0.6rem; }
 
 /* Lançamento */
 .lancamento { display: grid; grid-template-columns: 1fr 320px; gap: 1rem; margin-bottom: 1rem; }

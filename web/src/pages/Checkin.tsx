@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { api, brl, gravarLocal, lerLocal, type Area, type Cliente, type Evento, type ProdutoResumo } from '../api'
+import BuscaCliente from '../components/BuscaCliente'
 
 const CHAVE_ENTRADA = 'jetpoa.checkin.entrada'
 type Msg = { tipo: 'ok' | 'erro'; texto: string }
@@ -53,30 +54,21 @@ function Entrada({ entrada, onMsg }: { entrada: 'T' | 'R'; onMsg: (m: Msg) => vo
   const [areas, setAreas] = useState<Area[]>([])
   const [numero, setNumero] = useState('')
   const [areaId, setAreaId] = useState<number | null>(null)
-  const [busca, setBusca] = useState('')
-  const [sugestoes, setSugestoes] = useState<Cliente[]>([])
   const [cliente, setCliente] = useState<Cliente | null>(null)
-  const [novo, setNovo] = useState(false)
-  const [n, setN] = useState({ nome: '', cpf: '', celular: '', aceita: false })
   const [enviando, setEnviando] = useState(false)
 
   useEffect(() => { api.areas().then(setAreas).catch(() => {}) }, [])
-  useEffect(() => {
-    if (cliente || novo || busca.trim().length < 3) { setSugestoes([]); return }
-    const t = setTimeout(() => api.clientes(busca).then(r => setSugestoes(r.slice(0, 6))).catch(() => {}), 250)
-    return () => clearTimeout(t)
-  }, [busca, cliente, novo])
 
-  const limpar = () => { setNumero(''); setBusca(''); setCliente(null); setNovo(false); setN({ nome: '', cpf: '', celular: '', aceita: false }); setAreaId(null) }
+  const limpar = () => { setNumero(''); setCliente(null); setAreaId(null) }
 
   const enviar = async (e: FormEvent) => {
     e.preventDefault()
+    if (!cliente) { onMsg({ tipo: 'erro', texto: 'Selecione ou cadastre o cliente antes do check-in.' }); return }
     setEnviando(true)
     try {
       const r = await api.checkin({
-        numero: Number(numero), entradaTipo: entrada, areaId, clienteId: cliente?.id ?? null,
-        novoCliente: novo ? { nome: n.nome, cpf: n.cpf || null, celular: n.celular || null, email: null, sexo: null, aceitaComunicacao: n.aceita } : null,
-        identificacao: !cliente && !novo ? busca.trim() || null : null, observacao: null,
+        numero: Number(numero), entradaTipo: entrada, areaId, clienteId: cliente.id,
+        novoCliente: null, identificacao: null, observacao: null,
       })
       onMsg({ tipo: 'ok', texto: `Comanda ${r.numero} aberta para ${r.cliente} (${r.entrada === 'R' ? 'Rio' : 'Terra'})` + (r.taxas.length ? ` · lançado: ${r.taxas.map(t => `${t.nome} ${brl(t.valor)}`).join(', ')}` : '') })
       limpar()
@@ -97,28 +89,13 @@ function Entrada({ entrada, onMsg }: { entrada: 'T' | 'R'; onMsg: (m: Msg) => vo
             {areas.map(a => <option key={a.id} value={a.id}>{a.codigo} · {a.nome}</option>)}
           </select>
         </label>
-        {!novo && (
-          <label className="largo">Cliente (CPF, celular ou nome)
-            {cliente
-              ? <span className="cliente-sel"><b>{cliente.nome}</b> · {cliente.categoria}<button type="button" className="sec" onClick={() => { setCliente(null); setBusca('') }}>trocar</button></span>
-              : <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar no cadastro… (ou só um nome para a comanda)" />}
-            {sugestoes.length > 0 && (
-              <span className="sugestoes">
-                {sugestoes.map(s => <button type="button" key={s.id} className="sec" onClick={() => setCliente(s)}>{s.nome}{s.celular ? ` · ${s.celular}` : ''} · {s.categoria}</button>)}
-              </span>
-            )}
-          </label>
-        )}
-        {novo && <>
-          <label>Nome*<input value={n.nome} onChange={e => setN({ ...n, nome: e.target.value })} required /></label>
-          <label>CPF<input value={n.cpf} onChange={e => setN({ ...n, cpf: e.target.value })} inputMode="numeric" /></label>
-          <label>Celular (DDD)<input value={n.celular} onChange={e => setN({ ...n, celular: e.target.value })} inputMode="tel" /></label>
-          <label className="check"><input type="checkbox" checked={n.aceita} onChange={e => setN({ ...n, aceita: e.target.checked })} /> Aceita receber comunicações (LGPD)</label>
-        </>}
+        <div className="largo campo">
+          <span className="rotulo">Cliente* (obrigatório)</span>
+          <BuscaCliente cliente={cliente} onCliente={setCliente} />
+        </div>
       </div>
       <div className="acoes">
-        <button type="submit" disabled={enviando}>{enviando ? 'Abrindo…' : `Check-in ${entrada === 'R' ? 'RIO' : 'TERRA'}`}</button>
-        {!cliente && <button type="button" className="sec" onClick={() => { setNovo(v => !v); setN({ ...n, nome: busca }) }}>{novo ? 'Buscar cliente' : '+ Cadastrar cliente'}</button>}
+        <button type="submit" disabled={enviando || !cliente}>{enviando ? 'Abrindo…' : `Check-in ${entrada === 'R' ? 'RIO' : 'TERRA'}`}</button>
       </div>
     </form>
   )

@@ -17,7 +17,18 @@ export default function Clientes() {
   const [form, setForm] = useState<ClienteInput | null>(null)
   const [msg, setMsg] = useState<{ tipo: 'erro' | 'ok'; texto: string }>()
 
+  const [cpfDono, setCpfDono] = useState<Cliente | null>(null)
+
   useEffect(() => { api.clienteCategorias().then(setCategorias).catch(() => {}) }, [])
+
+  // CPF não pode duplicar: avisa enquanto digita
+  const cpfDigitado = (form?.cpf ?? '').replace(/\D/g, '')
+  useEffect(() => {
+    if (cpfDigitado.length !== 11) { setCpfDono(null); return }
+    let vivo = true
+    api.clientePorCpf(cpfDigitado).then(c => { if (vivo) setCpfDono(c && c.id !== editId ? c : null) })
+    return () => { vivo = false }
+  }, [cpfDigitado, editId])
 
   const carregar = () => api.clientes(busca).then(setLista).catch(e => setMsg({ tipo: 'erro', texto: e.message }))
   useEffect(() => { const t = setTimeout(carregar, 250); return () => clearTimeout(t) }, [busca]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -82,10 +93,14 @@ export default function Clientes() {
             </label>
             <label className="largo">Observação<input value={form.observacao ?? ''} onChange={e => set('observacao', txt(e.target.value))} /></label>
           </div>
+          {cpfDono && (
+            <p className="alerta-box">CPF já cadastrado para <b>{cpfDono.nome}</b> (cliente nº {cpfDono.id}).{' '}
+              <button type="button" className="sec" onClick={() => editar(cpfDono)}>Abrir este cadastro</button></p>
+          )}
           <label className="check"><input type="checkbox" checked={form.aceitaComunicacao} onChange={e => set('aceitaComunicacao', e.target.checked)} /> Aceita receber comunicações (LGPD)</label>
           {editId && <label className="check"><input type="checkbox" checked={form.ativo} onChange={e => set('ativo', e.target.checked)} /> Ativo</label>}
           <div className="acoes">
-            <button type="submit">Salvar</button>
+            <button type="submit" disabled={!!cpfDono}>Salvar</button>
             <button type="button" className="sec" onClick={() => setForm(null)}>Cancelar</button>
           </div>
         </form>

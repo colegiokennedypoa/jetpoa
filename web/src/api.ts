@@ -188,6 +188,14 @@ export const api = {
     req<ProdutoResumo[]>(`/api/produtos?${qs(p)}`),
   clienteCategorias: () => req<ClienteCategoria[]>('/api/cliente-categorias'),
   clientes: (busca: string) => req<Cliente[]>(`/api/clientes?${qs({ busca })}`),
+  cliente: (id: number) => req<Cliente>(`/api/clientes/${id}`),
+  /** Cliente que já usa o CPF, ou null se o CPF está livre. */
+  clientePorCpf: async (cpf: string): Promise<Cliente | null> => {
+    const r = await fetch(`/api/clientes/cpf/${encodeURIComponent(cpf)}`)
+    return r.ok ? r.json() : null
+  },
+  vincularCliente: (comandaId: number, clienteId: number) =>
+    req<void>(`/api/comandas/${comandaId}`, { method: 'PATCH', body: JSON.stringify({ clienteId }) }),
   criarCliente: (c: ClienteInput) => req<{ id: number }>('/api/clientes', { method: 'POST', body: JSON.stringify(c) }),
   atualizarCliente: (id: number, c: ClienteInput) =>
     req<void>(`/api/clientes/${id}`, { method: 'PUT', body: JSON.stringify(c) }),

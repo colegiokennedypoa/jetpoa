@@ -110,3 +110,5 @@ cd web; npm run dev                        # front em http://localhost:5173 (pro
 - **Sincronizar produtos do Forms** durante o paralelo: novos, preço e ativo. Dados fiscais só preenchem o que está vazio.
 
 > Numeração da NFC-e separada por ambiente (`db/06_numeracao_por_ambiente.sql`): testes em homologação não consomem números de produção.
+
+> **Regras de cadastro:** toda comanda exige cliente cadastrado (`db/08_comanda_exige_cliente.sql`) e o CPF nunca se repete (índice único + aviso nas telas).

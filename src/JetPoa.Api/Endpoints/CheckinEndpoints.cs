@@ -99,7 +99,8 @@ public static class CheckinEndpoints
             if (clienteId is not null)
                 nomeCliente = await c.ExecuteScalarAsync<string?>("select nome from cliente where id = :clienteId", new { clienteId }, tx);
             var identificacao = string.IsNullOrWhiteSpace(i.Identificacao) ? null : i.Identificacao.Trim();
-            if (clienteId is null && identificacao is null) return Erro("Informe o cliente ou um nome para a comanda.");
+            // regra do JetPOA: comanda só para cliente cadastrado
+            if (clienteId is null || nomeCliente is null) return Erro("Selecione o cliente ou cadastre-o (nome + CPF ou celular).");
 
             var evento = await c.QuerySingleOrDefaultAsync<Evento>(SelectEvento + " where e.data = trunc(sysdate) and e.ativo = 'S'", transaction: tx);
 
@@ -185,6 +186,7 @@ public static class CheckinEndpoints
         if (string.IsNullOrWhiteSpace(n.Nome)) return (null, "Informe o nome do cliente.");
         if (cpf is not null && !Documento.CpfValido(cpf)) return (null, "CPF inválido.");
         if (cel is not null && cel.Length is < 10 or > 13) return (null, "Celular deve ter DDD + número.");
+        if (cpf is null && cel is null) return (null, "Para cadastrar o cliente informe CPF ou celular.");
 
         if (cpf is not null)
         {

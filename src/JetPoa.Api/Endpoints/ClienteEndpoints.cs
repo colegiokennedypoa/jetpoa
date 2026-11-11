@@ -82,6 +82,16 @@ public static class ClienteEndpoints
             });
         });
 
+        // Verificação de CPF já cadastrado (usada nas telas antes de salvar)
+        g.MapGet("/clientes/cpf/{cpf}", async (Db db, string cpf, CancellationToken ct) =>
+        {
+            var d = Documento.SoDigitos(cpf);
+            if (d is null || !Documento.CpfValido(d)) return Results.UnprocessableEntity(new { erro = "CPF inválido." });
+            using var c = await db.OpenAsync(ct);
+            var cli = await c.QuerySingleOrDefaultAsync<Cliente>(SelectCliente + " where c.cpf = :d", new { d });
+            return cli is null ? Results.NotFound() : Results.Ok(cli);
+        });
+
         g.MapGet("/clientes/{id:long}", async (Db db, long id, CancellationToken ct) =>
         {
             using var c = await db.OpenAsync(ct);
@@ -95,6 +105,7 @@ public static class ClienteEndpoints
             if (erros.Count > 0) return Results.ValidationProblem(erros);
 
             using var c = await db.OpenAsync(ct);
+            if (await CpfEmUsoAsync(c, cpf, null) is { } dono) return dono;
             var categoriaId = input.CategoriaId
                 ?? await c.ExecuteScalarAsync<long>("select id from cliente_categoria where nome = 'Normal'");
             var id = await c.ExecuteScalarAsync<long>("select sq_cliente.nextval from dual");
@@ -120,6 +131,7 @@ public static class ClienteEndpoints
             if (erros.Count > 0) return Results.ValidationProblem(erros);
 
             using var c = await db.OpenAsync(ct);
+            if (await CpfEmUsoAsync(c, cpf, id) is { } dono) return dono;
             var categoriaId = input.CategoriaId
                 ?? await c.ExecuteScalarAsync<long>("select categoria_id from cliente where id = :id", new { id });
             try
@@ -141,6 +153,16 @@ public static class ClienteEndpoints
                 return Results.Conflict(new { erro = "Já existe cliente com este CPF." });
             }
         });
+    }
+
+    /// <summary>409 informando quem já usa o CPF (o índice único uk_cliente_cpf é a garantia final).</summary>
+    private static async Task<IResult?> CpfEmUsoAsync(System.Data.IDbConnection c, string? cpf, long? idAtual)
+    {
+        if (cpf is null) return null;
+        var dono = await c.QueryFirstOrDefaultAsync<Cliente>(
+            SelectCliente + " where c.cpf = :cpf and (:idAtual is null or c.id <> :idAtual)", new { cpf, idAtual });
+        return dono is null ? null
+            : Results.Conflict(new { erro = $"CPF já cadastrado para {dono.Nome} (cliente nº {dono.Id}).", clienteId = dono.Id });
     }
 
     private static object Parametros(long id, ClienteInput i, string? cpf, string? celular, long categoriaId) => new

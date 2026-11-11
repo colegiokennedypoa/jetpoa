@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { api, brl, hora, type Area, type Cliente, type ComandaItem, type ComandaResumo, type Usuario } from '../api'
 import Lancamento from '../components/Lancamento'
 import FecharConta from '../components/FecharConta'
+import BuscaCliente from '../components/BuscaCliente'
 
 const IMPRESSAO: Record<string, [string, string]> = {
   P: ['Na fila', 'tag pend'],
@@ -71,25 +72,18 @@ function AbrirComanda({ onAberta, onCancelar }: { onAberta: (id: number) => void
   const [numero, setNumero] = useState('')
   const [entrada, setEntrada] = useState<'T' | 'R'>('T')
   const [areaId, setAreaId] = useState<number | null>(null)
-  const [busca, setBusca] = useState('')
-  const [sugestoes, setSugestoes] = useState<Cliente[]>([])
   const [cliente, setCliente] = useState<Cliente | null>(null)
   const [erro, setErro] = useState<string>()
 
   useEffect(() => { api.areas().then(setAreas).catch(() => {}) }, [])
-  useEffect(() => {
-    if (cliente || busca.trim().length < 3) { setSugestoes([]); return }
-    const t = setTimeout(() => api.clientes(busca).then(r => setSugestoes(r.slice(0, 6))).catch(() => {}), 250)
-    return () => clearTimeout(t)
-  }, [busca, cliente])
 
   const salvar = async (e: FormEvent) => {
     e.preventDefault()
     setErro(undefined)
+    if (!cliente) { setErro('Selecione ou cadastre o cliente antes de abrir a comanda.'); return }
     try {
       const r = await api.abrirComanda({
-        numero: Number(numero), clienteId: cliente?.id ?? null,
-        identificacao: cliente ? null : busca.trim() || null, entradaTipo: entrada, areaId,
+        numero: Number(numero), clienteId: cliente.id, identificacao: null, entradaTipo: entrada, areaId,
       })
       onAberta(r.id)
     } catch (err) {
@@ -114,29 +108,14 @@ function AbrirComanda({ onAberta, onCancelar }: { onAberta: (id: number) => void
             {areas.map(a => <option key={a.id} value={a.id}>{a.codigo} · {a.nome}</option>)}
           </select>
         </label>
-        <label className="largo">Cliente (nome, CPF ou celular) ou nome para identificar
-          {cliente ? (
-            <span className="cliente-sel">
-              <b>{cliente.nome}</b> · {cliente.categoria}
-              <button type="button" className="sec" onClick={() => { setCliente(null); setBusca('') }}>trocar</button>
-            </span>
-          ) : (
-            <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Digite para buscar no cadastro…" />
-          )}
-          {sugestoes.length > 0 && (
-            <span className="sugestoes">
-              {sugestoes.map(s => (
-                <button type="button" key={s.id} className="sec" onClick={() => setCliente(s)}>
-                  {s.nome} {s.celular ? `· ${s.celular}` : ''} {s.categoria ? `· ${s.categoria}` : ''}
-                </button>
-              ))}
-            </span>
-          )}
-        </label>
+        <div className="largo campo">
+          <span className="rotulo">Cliente* (obrigatório)</span>
+          <BuscaCliente cliente={cliente} onCliente={setCliente} />
+        </div>
       </div>
       {erro && <p className="erro">{erro}</p>}
       <div className="acoes">
-        <button type="submit">Abrir</button>
+        <button type="submit" disabled={!cliente}>Abrir</button>
         <button type="button" className="sec" onClick={onCancelar}>Cancelar</button>
       </div>
     </form>
@@ -228,11 +207,23 @@ function DetalheComanda({ id, onMudou, onMsg, onEncerrada }: {
         {c.situacao === 'A' ? (
           <span className="acoes-cab">
             <button onClick={() => setLancando(l => !l)}>{lancando ? 'Fechar lançamento' : '+ Lançar itens'}</button>
-            <button onClick={() => setModo('fechar')} disabled={c.qtdItens === 0}>Fechar conta</button>
+            <button onClick={() => setModo('fechar')} disabled={c.qtdItens === 0 || c.clienteId == null}
+              title={c.clienteId == null ? 'Vincule um cliente antes de fechar' : undefined}>Fechar conta</button>
             <button className="sec" onClick={() => setModo('cancelar')}>Cancelar comanda</button>
           </span>
         ) : <span className="tag ok">{c.situacao === 'F' ? 'Fechada' : 'Cancelada'}</span>}
       </div>
+
+      {c.clienteId == null && c.situacao === 'A' && (
+        <div className="cartao alerta-box">
+          <b>Comanda sem cliente cadastrado.</b> Selecione ou cadastre o cliente para poder fechar.
+          <BuscaCliente cliente={null} onCliente={async cli => {
+            if (!cli) return
+            try { await api.vincularCliente(c.id, cli.id); onMsg({ tipo: 'ok', texto: `Cliente ${cli.nome} vinculado à comanda ${c.numero}.` }); carregar(); onMudou() }
+            catch (e) { onMsg({ tipo: 'erro', texto: (e as Error).message }) }
+          }} />
+        </div>
+      )}
 
       {modo === 'fechar' && (
         <FecharConta comanda={c} itens={itens} onVoltar={() => setModo('ver')}
