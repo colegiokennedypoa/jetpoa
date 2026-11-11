@@ -22,6 +22,16 @@ A tela **Implantação** mostra o checklist ao vivo. Este roteiro diz **quando**
    .\scripts\instalar-servico.ps1
    ```
    O sistema fica em `http://<ip-do-servidor>:5080` para caixa, tablets e celulares da rede local.
+
+   > **Execução de scripts bloqueada?** (`...não pode ser carregado porque a execução de scripts foi desabilitada`)
+   > É a política padrão do Windows. Em vez de alterá-la, cole os comandos direto no PowerShell **como Administrador**:
+   > ```powershell
+   > New-Service -Name JetPOABistro -DisplayName 'JetPOA Bistrô' -BinaryPathName '"C:\Projeto\JetPOA\app\JetPoa.Api.exe" --urls http://0.0.0.0:5080' -StartupType Automatic
+   > sc.exe failure JetPOABistro reset= 86400 actions= restart/10000/restart/10000/restart/60000
+   > New-NetFirewallRule -DisplayName 'JetPOA Bistro 5080' -Direction Inbound -Protocol TCP -LocalPort 5080 -RemoteAddress LocalSubnet -Action Allow
+   > Start-Service JetPOABistro
+   > ```
+   > Para publicar sem o script: `cd web; npm run build; cd ..` e depois `dotnet publish src\JetPoa.Api\JetPoa.Api.csproj -c Release -o C:\Projeto\JetPOA\app`.
 2. **Usuários** (tela Usuários): Administrador → Gerentes → Caixas. Cada pessoa cria o próprio PIN.
 3. **Impressoras** (tela Produção): conferir o IP de Cozinha, Bar e Garçom, cadastrar o **Caixa** (DANFE) e usar "Imprimir teste" em cada uma.
    - Se a Bematech imprimir caracteres estranhos, colocar a impressora em modo **ESC/POS** (menu da impressora ou utilitário Bematech).
