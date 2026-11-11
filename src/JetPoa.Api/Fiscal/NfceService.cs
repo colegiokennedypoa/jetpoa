@@ -188,11 +188,19 @@ public sealed class NfceService(Db db, IOptionsMonitor<NfceOptions> opcoes, ILog
         var numero = d.Numero;
         if (numero == 0)
         {
-            numero = await c.ExecuteScalarAsync<int>(
-                "select ultimo_numero + 1 from nfce_numeracao where cnpj = :cnpj and serie = :serie for update",
-                new { cnpj = d.Emit.Cnpj, serie = d.Serie }, tx);
-            await c.ExecuteAsync("update nfce_numeracao set ultimo_numero = :numero where cnpj = :cnpj and serie = :serie",
-                new { numero, cnpj = d.Emit.Cnpj, serie = d.Serie }, tx);
+            var amb = d.Ambiente.ToString();
+            var atual = await c.ExecuteScalarAsync<int?>(
+                "select ultimo_numero from nfce_numeracao where cnpj = :cnpj and serie = :serie and ambiente = :amb for update",
+                new { cnpj = d.Emit.Cnpj, serie = d.Serie, amb }, tx);
+            if (atual is null)
+            {
+                await c.ExecuteAsync("insert into nfce_numeracao (cnpj, serie, ambiente, ultimo_numero) values (:cnpj, :serie, :amb, 0)",
+                    new { cnpj = d.Emit.Cnpj, serie = d.Serie, amb }, tx);
+                atual = 0;
+            }
+            numero = atual.Value + 1;
+            await c.ExecuteAsync("update nfce_numeracao set ultimo_numero = :numero where cnpj = :cnpj and serie = :serie and ambiente = :amb",
+                new { numero, cnpj = d.Emit.Cnpj, serie = d.Serie, amb }, tx);
         }
         var cNF = string.IsNullOrEmpty(d.CodigoNumerico) ? NfceXml.CodigoNumericoAleatorio(numero) : d.CodigoNumerico;
         var dados = d with { Numero = numero, CodigoNumerico = cNF, TpEmis = tpEmis };
@@ -394,8 +402,9 @@ public sealed class NfceService(Db db, IOptionsMonitor<NfceOptions> opcoes, ILog
         if (ok)
             await c.ExecuteAsync("""
                 update nfce set situacao = 'INUTILIZADA'
-                 where cnpj = :cnpj and serie = :serie and numero between :inicial and :final and situacao in ('REJEITADA','VERIFICAR')
-                """, new { cnpj, serie, inicial, final });
+                 where cnpj = :cnpj and serie = :serie and ambiente = :amb and numero between :inicial and :final
+                   and situacao in ('REJEITADA','VERIFICAR')
+                """, new { cnpj, serie, amb = Opt.Ambiente.ToString(), inicial, final });
         return new(ok ? "INUTILIZADA" : "ERRO", Mensagem: $"{cStat} - {Val(inf, "xMotivo")}");
     }
 

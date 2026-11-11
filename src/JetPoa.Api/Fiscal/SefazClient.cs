@@ -54,7 +54,8 @@ public sealed class SefazClient : IDisposable
         }
         catch (Exception e) when (e is HttpRequestException or TaskCanceledException && !ct.IsCancellationRequested)
         {
-            throw new FalhaComunicacao($"Sem resposta da SEFAZ ({servico}): {e.Message}", e);
+            var causa = e.InnerException is null ? "" : " → " + string.Join(" → ", Causas(e.InnerException));
+            throw new FalhaComunicacao($"Sem resposta da SEFAZ ({servico}): {e.Message}{causa}", e);
         }
 
         var texto = await resp.Content.ReadAsStringAsync(ct);
@@ -68,6 +69,11 @@ public sealed class SefazClient : IDisposable
         // primeiro elemento de dentro de nfeResultMsg
         var result = xml.Descendants().FirstOrDefault(x => x.Name.LocalName == "nfeResultMsg")?.Elements().FirstOrDefault();
         return result ?? throw new FalhaComunicacao($"Resposta sem nfeResultMsg ({(int)resp.StatusCode}): {Trunca(texto)}");
+    }
+
+    private static IEnumerable<string> Causas(Exception? e)
+    {
+        for (; e is not null; e = e.InnerException) yield return e.Message;
     }
 
     private static string Trunca(string s) => s.Length > 300 ? s[..300] : s;

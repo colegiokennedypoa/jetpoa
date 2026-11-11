@@ -152,9 +152,9 @@ public static class FiscalEndpoints
                 if (u is null || u.AutorizaDesconto != "S") return Results.UnprocessableEntity(new { erro = "Inutilização exige PIN de gerente/administrador." });
                 var serie = i.Serie ?? o.CurrentValue.Serie;
                 var usados = await c.ExecuteScalarAsync<int>("""
-                    select count(*) from nfce where serie = :serie and numero between :ini and :fim
+                    select count(*) from nfce where serie = :serie and ambiente = :amb and numero between :ini and :fim
                        and situacao in ('AUTORIZADA','CONTINGENCIA','CANCELADA','SUBSTITUIDA','PENDENTE')
-                    """, new { serie, ini = i.Inicial, fim = i.Final });
+                    """, new { serie, amb = o.CurrentValue.Ambiente.ToString(), ini = i.Inicial, fim = i.Final });
                 if (usados > 0) return Results.UnprocessableEntity(new { erro = "A faixa contém números já usados em notas válidas." });
             }
             return Results.Ok(await nfce.InutilizarAsync(i.Serie ?? o.CurrentValue.Serie, i.Inicial, i.Final, just, i.UsuarioId, ct));

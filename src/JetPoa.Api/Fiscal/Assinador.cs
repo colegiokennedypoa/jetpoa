@@ -9,8 +9,13 @@ namespace JetPoa.Api.Fiscal;
 /// <summary>Assinatura XMLDSig enveloped (RSA-SHA1 + C14N), padrão do Manual de Orientação do Contribuinte.</summary>
 public static class Assinador
 {
+    /// <summary>
+    /// UserKeySet (e não EphemeralKeySet): o TLS do Windows (SChannel) não aceita chave efêmera na
+    /// autenticação do cliente ("platform does not support ephemeral keys"). Sem PersistKeySet a chave
+    /// temporária é descartada quando o certificado é liberado.
+    /// </summary>
     public static X509Certificate2 CarregarCertificado(string arquivo, string? senha) =>
-        new(arquivo, senha, X509KeyStorageFlags.EphemeralKeySet | X509KeyStorageFlags.Exportable);
+        new(arquivo, senha, X509KeyStorageFlags.UserKeySet);
 
     /// <summary>
     /// Assina o elemento filho de <paramref name="raiz"/> que tem o atributo Id (infNFe, infEvento, infInut)

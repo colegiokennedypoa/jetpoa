@@ -77,3 +77,5 @@ cd web; npm run dev                        # front em http://localhost:5173 (pro
 cd web; npm run build; cd ..
 dotnet publish src/JetPoa.Api -c Release -o publish
 ```
+
+> Numeração da NFC-e separada por ambiente (`db/06_numeracao_por_ambiente.sql`): testes em homologação não consomem números de produção.
