@@ -237,6 +237,14 @@ public static class ComandaEndpoints
             if (situacao is null) return Results.NotFound(new { erro = "Comanda não encontrada." });
             if (situacao != "A") return Erro("Comanda não está aberta.");
 
+            // Login vinculado a um garçom lança sempre em nome dele (não escolhe outro);
+            // perfil Garçom sem vínculo não lança. Os demais (caixa) podem informar o garçom.
+            var garcomDoLogin = await c.ExecuteScalarAsync<long?>(
+                "select garcom_id from usuario where id = :usr", new { usr = user.Id() }, tx);
+            if (garcomDoLogin is null && user.FindFirstValue("perfil") == "Garçom")
+                return Erro("Seu login não está vinculado a um garçom. Peça ao gerente para vincular na tela Usuários.");
+            var garcomId = garcomDoLogin ?? input.GarcomId;
+
             var ids = itens.Select(x => x.ProdutoId).Distinct().ToList();
             var produtos = (await c.QueryAsync<ProdutoLanc>("""
                 select p.id, p.nome, p.preco_venda, p.ativo, p.vendivel, p.setor_producao_id, s.imprime
@@ -287,7 +295,7 @@ public static class ComandaEndpoints
                 {
                     usr = user.Id(),
                     id, produto_id = p.Id, quantidade = x.Quantidade, preco = p.PrecoVenda,
-                    observacao = Limpo(x.Observacao), garcom_id = input.GarcomId,
+                    observacao = Limpo(x.Observacao), garcom_id = garcomId,
                     envio_id = envioPorSetor.TryGetValue(p.SetorProducaoId, out var e) ? e : (long?)null,
                     origem
                 }, tx);

@@ -36,6 +36,9 @@ public static class UsuarioEndpoints
         public string TemPin { get; set; } = "N";
         public string PrecisaTrocarSenha { get; set; } = "N";
         public DateTime? UltimoLogin { get; set; }
+        /// <summary>Garçom que este login representa (lança sempre em nome dele).</summary>
+        public long? GarcomId { get; set; }
+        public string? Garcom { get; set; }
     }
 
     private sealed class UsuarioPin
@@ -50,13 +53,37 @@ public static class UsuarioEndpoints
 
     /// <param name="Senha">Obrigatória ao criar (provisória: troca no 1º login). Na edição, preencher = redefinir.</param>
     /// <param name="Pin">Opcional: 4 a 8 dígitos, para autorizar no caixa de outra pessoa.</param>
-    public sealed record UsuarioInput(string Nome, string Login, long PerfilId, string? Senha, string? Pin, bool Ativo);
+    /// <param name="GarcomId">Garçom que o login representa. Perfil Garçom sem garçom informado: cria um com o nome do usuário.</param>
+    public sealed record UsuarioInput(string Nome, string Login, long PerfilId, string? Senha, string? Pin, bool Ativo, long? GarcomId = null);
 
     private const string SelectUsuario = """
         select u.id, u.nome, u.login, u.perfil_id, p.nome perfil, p.limite_desconto_pct, p.autoriza_desconto, u.ativo,
-               case when u.pin_hash is not null then 'S' else 'N' end tem_pin, u.precisa_trocar_senha, u.ultimo_login
+               case when u.pin_hash is not null then 'S' else 'N' end tem_pin, u.precisa_trocar_senha, u.ultimo_login,
+               u.garcom_id, g.nome garcom
           from usuario u join perfil p on p.id = u.perfil_id
+          left join garcom g on g.id = u.garcom_id
         """;
+
+    /// <summary>
+    /// Garçom a vincular ao login: o informado; para o perfil Garçom sem informação, mantém o atual
+    /// ou cria um garçom com o nome do usuário (todo garçom precisa do próprio login).
+    /// </summary>
+    private static async Task<long?> GarcomDoLoginAsync(IDbConnection c, IDbTransaction tx, UsuarioInput i, long? atual)
+    {
+        if (i.GarcomId is not null) return i.GarcomId;
+        var perfil = await c.ExecuteScalarAsync<string?>("select nome from perfil where id = :perfilId", new { perfilId = i.PerfilId }, tx);
+        if (perfil != "Garçom") return null;
+        if (atual is not null) return atual;
+        var id = await c.ExecuteScalarAsync<long>("select sq_garcom.nextval from dual", transaction: tx);
+        await c.ExecuteAsync("insert into garcom (id, nome, ativo) values (:id, :nome, 'S')", new { id, nome = i.Nome.Trim() }, tx);
+        return id;
+    }
+
+    private static IResult Duplicado(OracleException e) => Results.Conflict(new
+    {
+        erro = e.Message.Contains("UK_USUARIO_GARCOM", StringComparison.OrdinalIgnoreCase)
+            ? "Este garçom já está vinculado a outro login." : "Login já existe.",
+    });
 
     /// <summary>Confere o PIN de um usuário ativo (autorização no caixa). Retorna null se não conferir.</summary>
     public static async Task<Usuario?> AutenticarAsync(IDbConnection c, long usuarioId, string? pin, IDbTransaction? tx = null)
@@ -109,24 +136,27 @@ public static class UsuarioEndpoints
                 return Results.UnprocessableEntity(new { erro = "O primeiro usuário precisa ser Administrador." });
 
             if (Validar(i, criando: true) is { } erro) return erro;
+            using var tx = c.BeginTransaction();
             try
             {
-                var id = await c.ExecuteScalarAsync<long>("select sq_usuario.nextval from dual");
+                var garcomId = await GarcomDoLoginAsync(c, tx, i, null);
+                var id = await c.ExecuteScalarAsync<long>("select sq_usuario.nextval from dual", transaction: tx);
                 await c.ExecuteAsync("""
-                    insert into usuario (id, nome, login, senha_hash, pin_hash, perfil_id, ativo, precisa_trocar_senha, carimbo_seguranca)
-                    values (:id, :nome, :login, :senha, :pin, :perfil_id, :ativo, :trocar, :carimbo)
+                    insert into usuario (id, nome, login, senha_hash, pin_hash, perfil_id, ativo, precisa_trocar_senha, carimbo_seguranca, garcom_id)
+                    values (:id, :nome, :login, :senha, :pin, :perfil_id, :ativo, :trocar, :carimbo, :garcom_id)
                     """, new
                 {
                     id, nome = i.Nome.Trim(), login = i.Login.Trim().ToLowerInvariant(), senha = Senha.Hash(i.Senha!),
                     pin = string.IsNullOrEmpty(i.Pin) ? null : Senha.Hash(i.Pin), perfil_id = i.PerfilId, ativo = i.Ativo ? "S" : "N",
                     trocar = existe == 0 ? "N" : "S",   // o 1º administrador escolhe a própria senha
-                    carimbo = Guid.NewGuid().ToString("N"),
-                });
+                    carimbo = Guid.NewGuid().ToString("N"), garcom_id = garcomId,
+                }, tx);
+                tx.Commit();
                 return Results.Created($"/api/usuarios/{id}", new { id });
             }
             catch (OracleException e) when (e.Number == 1)
             {
-                return Results.Conflict(new { erro = "Login já existe." });
+                return Duplicado(e);
             }
         }).AllowAnonymous();
 
@@ -143,13 +173,17 @@ public static class UsuarioEndpoints
                     """) <= 1)
                 return Results.UnprocessableEntity(new { erro = "É preciso manter pelo menos um Administrador ativo." });
 
-            // trocar senha, perfil ou desativar derruba as sessões abertas desse usuário
-            var derrubar = !string.IsNullOrEmpty(i.Senha) || antes.PerfilId != i.PerfilId || (antes.Ativo == "S") != i.Ativo;
+            using var tx = c.BeginTransaction();
+            long? garcomId;
             try
             {
+                garcomId = await GarcomDoLoginAsync(c, tx, i, antes.GarcomId);
+                // trocar senha, perfil, garçom ou desativar derruba as sessões abertas desse usuário
+                var derrubar = !string.IsNullOrEmpty(i.Senha) || antes.PerfilId != i.PerfilId || (antes.Ativo == "S") != i.Ativo
+                               || antes.GarcomId != garcomId;
                 await c.ExecuteAsync("""
                     update usuario
-                       set nome = :nome, login = :login, perfil_id = :perfil_id, ativo = :ativo, alterado_em = sysdate,
+                       set nome = :nome, login = :login, perfil_id = :perfil_id, ativo = :ativo, alterado_em = sysdate, garcom_id = :garcom_id,
                            senha_hash = nvl(:senha, senha_hash),
                            precisa_trocar_senha = case when :senha is not null then 'S' else precisa_trocar_senha end,
                            pin_hash = nvl(:pin, pin_hash),
@@ -162,18 +196,19 @@ public static class UsuarioEndpoints
                     id, nome = i.Nome.Trim(), login = i.Login.Trim().ToLowerInvariant(), perfil_id = i.PerfilId, ativo = i.Ativo ? "S" : "N",
                     senha = string.IsNullOrEmpty(i.Senha) ? null : Senha.Hash(i.Senha),
                     pin = string.IsNullOrEmpty(i.Pin) ? null : Senha.Hash(i.Pin),
-                    derrubar = derrubar ? 1 : 0, carimbo = Guid.NewGuid().ToString("N"),
-                });
+                    derrubar = derrubar ? 1 : 0, carimbo = Guid.NewGuid().ToString("N"), garcom_id = garcomId,
+                }, tx);
             }
             catch (OracleException e) when (e.Number == 1)
             {
-                return Results.Conflict(new { erro = "Login já existe." });
+                return Duplicado(e);
             }
             await c.ExecuteAsync("""
                 insert into auditoria (usuario_id, entidade, entidade_id, acao, detalhe)
                 values (:usr, 'USUARIO', :eid, 'UPDATE', :det)
                 """, new { usr = user.Id(), eid = id.ToString(),
-                          det = $"{{\"perfilAntes\":{antes.PerfilId},\"perfil\":{i.PerfilId},\"ativo\":\"{(i.Ativo ? "S" : "N")}\",\"senhaRedefinida\":{(!string.IsNullOrEmpty(i.Senha)).ToString().ToLowerInvariant()}}}" });
+                          det = $"{{\"perfilAntes\":{antes.PerfilId},\"perfil\":{i.PerfilId},\"ativo\":\"{(i.Ativo ? "S" : "N")}\",\"senhaRedefinida\":{(!string.IsNullOrEmpty(i.Senha)).ToString().ToLowerInvariant()},\"garcomAntes\":{antes.GarcomId?.ToString() ?? "null"},\"garcom\":{garcomId?.ToString() ?? "null"}}}" }, tx);
+            tx.Commit();
             cache.Remove(AuthEndpoints.ChaveCache(id));
             return Results.NoContent();
         }).RequireAuthorization(Permissoes.UsuariosGerenciar);

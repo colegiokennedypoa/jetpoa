@@ -174,7 +174,7 @@ function CancelarComanda({ id, temItens, onVoltar, onCancelada }: {
 function DetalheComanda({ id, onMudou, onMsg, onEncerrada }: {
   id: number; onMudou: () => void; onEncerrada: () => void; onMsg: (m: { tipo: 'ok' | 'erro'; texto: string }) => void
 }) {
-  const { pode } = useSessao()
+  const { eu, pode } = useSessao()
   const [dados, setDados] = useState<{ comanda: ComandaResumo; itens: ComandaItem[] }>()
   const [modo, setModo] = useState<'ver' | 'lancar' | 'fechar' | 'cancelar'>('ver')
   const lancando = modo === 'lancar'
@@ -244,7 +244,7 @@ function DetalheComanda({ id, onMudou, onMsg, onEncerrada }: {
       )}
 
       {lancando && (
-        <Lancamento comandaId={c.id} origem="CAIXA"
+        <Lancamento comandaId={c.id} origem="CAIXA" garcomFixo={eu.garcomId ?? undefined}
           onLancado={m => { onMsg({ tipo: 'ok', texto: m }); setModo('ver'); carregar(); onMudou() }} />
       )}
 

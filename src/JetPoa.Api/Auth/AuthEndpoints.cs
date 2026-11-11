@@ -32,12 +32,16 @@ public static class AuthEndpoints
         public string AutorizaDesconto { get; set; } = "N";
         public int TentativasFalhas { get; set; }
         public DateTime? BloqueadoAte { get; set; }
+        public long? GarcomId { get; set; }
+        public string? GarcomNome { get; set; }
     }
 
     private const string SelectUsuario = """
         select u.id, u.nome, u.login, p.nome perfil, u.ativo, u.senha_hash, u.carimbo_seguranca, u.precisa_trocar_senha,
-               p.limite_desconto_pct, p.autoriza_desconto, u.tentativas_falhas, u.bloqueado_ate
+               p.limite_desconto_pct, p.autoriza_desconto, u.tentativas_falhas, u.bloqueado_ate,
+               u.garcom_id, g.nome garcom_nome
           from usuario u join perfil p on p.id = u.perfil_id
+          left join garcom g on g.id = u.garcom_id
         """;
 
     public static void MapAuth(this IEndpointRouteBuilder app)
@@ -118,6 +122,7 @@ public static class AuthEndpoints
     {
         u.Id, u.Nome, u.Login, u.Perfil, u.LimiteDescontoPct, autorizaDesconto = u.AutorizaDesconto == "S",
         precisaTrocarSenha = u.PrecisaTrocarSenha == "S", permissoes = Permissoes.DoPerfil(u.Perfil),
+        u.GarcomId, u.GarcomNome,
     };
 
     private static async Task EntrarAsync(HttpContext http, UsuarioLogin u)

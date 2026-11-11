@@ -1,27 +1,17 @@
-import { useEffect, useState, type FormEvent } from 'react'
-import { api, brl, type ComandaResumo, type Garcom as TGarcom } from '../api'
+import { useState, type FormEvent } from 'react'
+import { api, brl, type ComandaResumo } from '../api'
+import { useSessao } from '../sessao'
 import Lancamento from '../components/Lancamento'
 
-const CHAVE = 'jetpoa.garcom'
-
-function lerGarcom(): number | null {
-  try { const v = localStorage.getItem(CHAVE); return v ? Number(v) : null } catch { return null }
-}
-
-/** Tela do garçom (celular): escolhe o garçom uma vez, digita a comanda e lança. */
+/**
+ * Tela do garçom (celular): cada garçom entra com o próprio login, então o garçom é sempre
+ * quem está logado (não dá para trocar). Digita a comanda e lança.
+ */
 export default function Garcom() {
-  const [garcons, setGarcons] = useState<TGarcom[]>([])
-  const [garcomId, setGarcomId] = useState<number | null>(lerGarcom)
+  const { eu } = useSessao()
   const [numero, setNumero] = useState('')
   const [comanda, setComanda] = useState<ComandaResumo | null>(null)
   const [msg, setMsg] = useState<{ tipo: 'ok' | 'erro'; texto: string }>()
-
-  useEffect(() => { api.garcons().then(g => setGarcons(g.filter(x => x.ativo === 'S'))).catch(() => {}) }, [])
-
-  const escolherGarcom = (id: number | null) => {
-    setGarcomId(id)
-    try { if (id) localStorage.setItem(CHAVE, String(id)); else localStorage.removeItem(CHAVE) } catch { /* sem storage */ }
-  }
 
   const buscar = async (e: FormEvent) => {
     e.preventDefault()
@@ -30,15 +20,10 @@ export default function Garcom() {
     catch (err) { setComanda(null); setMsg({ tipo: 'erro', texto: (err as Error).message }) }
   }
 
-  const nome = garcons.find(g => g.id === garcomId)?.nome
-
-  if (!garcomId) {
+  if (!eu.garcomId) {
     return (
       <section className="garcom">
-        <h3>Quem é você?</h3>
-        <div className="garcom-lista">
-          {garcons.map(g => <button key={g.id} className="sec" onClick={() => escolherGarcom(g.id)}>{g.nome}</button>)}
-        </div>
+        <p className="erro">Seu login não está vinculado a um garçom. Peça ao gerente para vincular na tela Usuários.</p>
       </section>
     )
   }
@@ -46,8 +31,7 @@ export default function Garcom() {
   return (
     <section className="garcom">
       <div className="filtros">
-        <span>Garçom: <b>{nome ?? '…'}</b></span>
-        <button className="sec" onClick={() => { escolherGarcom(null); setComanda(null) }}>trocar</button>
+        <span>Garçom: <b>{eu.garcomNome}</b></span>
       </div>
 
       {!comanda ? (
@@ -65,7 +49,7 @@ export default function Garcom() {
             <span className="total">{brl(comanda.total)}</span>
             <button className="sec" onClick={() => { setComanda(null); setNumero('') }}>Outra comanda</button>
           </div>
-          <Lancamento comandaId={comanda.id} origem="GARCOM" garcomFixo={garcomId}
+          <Lancamento comandaId={comanda.id} origem="GARCOM" garcomFixo={eu.garcomId}
             onLancado={m => { setMsg({ tipo: 'ok', texto: `Comanda ${comanda.numero}: ${m}` }); setComanda(null); setNumero('') }} />
         </>
       )}

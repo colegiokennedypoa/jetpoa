@@ -66,11 +66,14 @@ export type Usuario = {
   id: number; nome: string; login: string; perfilId: number; perfil: string
   limiteDescontoPct: number; autorizaDesconto: string; ativo: string
   temPin: string; precisaTrocarSenha: string; ultimoLogin: string | null
+  garcomId: number | null; garcom: string | null
 }
 /** Usuário logado (GET /api/auth/eu). */
 export type Eu = {
   id: number; nome: string; login: string; perfil: string; limiteDescontoPct: number
   autorizaDesconto: boolean; precisaTrocarSenha: boolean; permissoes: string[]
+  /** Garçom que este login representa: lança sempre em nome dele. */
+  garcomId: number | null; garcomNome: string | null
 }
 export type Perfil = { id: number; nome: string; limiteDescontoPct: number; autorizaDesconto: string }
 export type FormaPagamento = { id: number; codigo: string; nome: string; tpagNfce: string; aceitaTroco: string }
@@ -256,7 +259,7 @@ export const api = {
   perfis: () => req<Perfil[]>('/api/perfis'),
   usuarios: () => req<Usuario[]>('/api/usuarios'),
   autorizadores: () => req<Usuario[]>('/api/usuarios/autorizadores'),
-  salvarUsuario: (id: number | null, u: { nome: string; login: string; perfilId: number; senha: string | null; pin: string | null; ativo: boolean }) =>
+  salvarUsuario: (id: number | null, u: { nome: string; login: string; perfilId: number; senha: string | null; pin: string | null; ativo: boolean; garcomId?: number | null }) =>
     id ? req<void>(`/api/usuarios/${id}`, { method: 'PUT', body: JSON.stringify(u) })
        : req<{ id: number }>('/api/usuarios', { method: 'POST', body: JSON.stringify(u) }),
 

@@ -36,6 +36,7 @@ Sistema do bistrô do JetPOA. O complexo náutico de Porto Alegre tem duas entra
 8. **Segredos ficam fora do Git:** conexão, senha do certificado e CSC estão em `C:\Projeto\certificado\52822987000123.conf`. O `.gitignore` já bloqueia `*.conf`, `*.pfx` e `*.p12`.
 9. **Falha fiscal não desfaz o fechamento.** A comanda fica fechada e a nota pendente aparece na tela Fiscal.
 10. **Venda nunca é bloqueada por estoque.** O saldo pode ficar negativo.
+11. **Cada garçom tem o próprio login.** O garçom do item vem de `usuario.garcom_id` do login, nunca da tela. O perfil Garçom sem vínculo não lança.
 
 ## 3. Ambiente da máquina servidor
 | Item | Onde |
@@ -119,8 +120,9 @@ scripts/                  publicar.ps1, instalar-servico.ps1, atualizar.ps1
 | `07` | `evento`, `movimento_estoque`, colunas de check-in |
 | `08` | comanda exige cliente |
 | `09` | login com senha: hash, troca obrigatória, bloqueio, carimbo de segurança, último acesso |
+| `10` | `usuario.garcom_id`: cada login de garçom lança sempre em nome do próprio garçom (único por login) |
 
-Todos os scripts até o `09` **já foram aplicados** no banco de produção. As colunas são snake_case e o Dapper mapeia para PascalCase (`MatchNamesWithUnderscores`).
+Todos os scripts até o `10` **já foram aplicados** no banco de produção. As colunas são snake_case e o Dapper mapeia para PascalCase (`MatchNamesWithUnderscores`).
 
 ## 6. Convenções e "como fazer"
 - **Nova rota protegida:** dentro do `MapXxx`, coloque a rota num grupo com `.RequireAuthorization(Permissoes.Algo)`. Toda rota exige login por padrão (FallbackPolicy). Use `AllowAnonymous()` só com justificativa.
@@ -187,3 +189,5 @@ Todos os scripts até o `09` **já foram aplicados** no banco de produção. As 
 | `ea619ff`, `71e5df3` | Fase 6: implantação, serviço Windows, roteiro de virada |
 | `f46fd7c`, `8cf6aef`, `68f5b1f` | Comanda exige cliente, CPF único, tratamento automático da rejeição 539 |
 | `ccc5da4` | Login com usuário e senha e permissões por perfil |
+| `08b0f56` | Este guia |
+| (seguinte) | Cada garçom com o próprio login, sem troca de garçom após entrar |

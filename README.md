@@ -20,7 +20,7 @@ Substitui o sistema Forms 6i do bistrô. Análise e proposta: [docs/01-analise-e
 6. `db/04_fase3_fechamento.sql`: como BISTRO (fechamento, descontos, isenções, pagamentos)
 7. `db/05_fase4_nfce.sql`: como BISTRO (emitente, numeração, NFC-e, inutilização, impressora do caixa)
 8. `db/06_numeracao_por_ambiente.sql` e `db/07_fase5_checkin_estoque.sql`: como BISTRO
-9. `db/08_comanda_exige_cliente.sql` e `db/09_login_senha.sql`: como BISTRO
+9. `db/08_comanda_exige_cliente.sql`, `db/09_login_senha.sql` e `db/10_usuario_garcom.sql`: como BISTRO
 
 ## Check-in, estoque e relatórios (Fase 5)
 - **Check-in (portaria TERRA / RIO):** cada aparelho lembra a sua portaria.
@@ -89,6 +89,12 @@ As mesmas chaves também podem vir por variável de ambiente. Valor vazio no arq
   | Check-in | portaria (check-in/check-out) e clientes |
 
   As permissões ficam em `src/JetPoa.Api/Auth/Permissoes.cs`.
+- **Cada garçom tem o próprio login:**
+  - na tela Usuários, o login fica vinculado a um garçom. No perfil Garçom, se nenhum garçom for escolhido, o sistema cria um com o nome do usuário;
+  - tudo o que esse login lança sai em nome desse garçom, sem opção de trocar depois de entrar (o servidor ignora outro garçom enviado);
+  - um garçom só pode ter um login;
+  - perfil Garçom sem vínculo não consegue lançar;
+  - o caixa sem vínculo continua escolhendo o garçom ao lançar.
 - **PIN de autorização (opcional, só Gerente/Administrador):** serve para o gerente liberar, no caixa de outra pessoa, desconto acima do limite, consumo interno ou cancelamento de comanda com itens.
 
 ## Fechamento (Fase 3)
