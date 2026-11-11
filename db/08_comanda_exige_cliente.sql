@@ -8,6 +8,8 @@
 -- Depois de vincular/cancelar as comandas antigas sem cliente, torne a regra total:
 --   alter table comanda modify constraint ck_comanda_cliente validate;
 alter table comanda add constraint ck_comanda_cliente check (cliente_id is not null) enable novalidate;
+-- Em 11/11/2026 a única comanda antiga sem cliente (1234) foi regularizada e a regra foi validada:
+alter table comanda modify constraint ck_comanda_cliente validate;
 
 -- Conferência
 select constraint_name, status, validated from user_constraints where constraint_name = 'CK_COMANDA_CLIENTE';
