@@ -20,13 +20,17 @@ Substitui o sistema Forms 6i do bistrô. Análise e proposta: [docs/01-analise-e
 6. `db/04_fase3_fechamento.sql`: como BISTRO (fechamento, descontos, isenções, pagamentos)
 7. `db/05_fase4_nfce.sql`: como BISTRO (emitente, numeração, NFC-e, inutilização, impressora do caixa)
 8. `db/06_numeracao_por_ambiente.sql` e `db/07_fase5_checkin_estoque.sql`: como BISTRO
-9. `db/08_comanda_exige_cliente.sql`, `db/09_login_senha.sql` e `db/10_usuario_garcom.sql`: como BISTRO
+9. `db/08_comanda_exige_cliente.sql`, `db/09_login_senha.sql`, `db/10_usuario_garcom.sql` e `db/11_comanda_menor_idade.sql`: como BISTRO
 
 ## Check-in, estoque e relatórios (Fase 5)
 - **Check-in (portaria TERRA / RIO):** cada aparelho lembra a sua portaria.
   - Busca o cliente por CPF, celular ou nome, cadastra na hora sem duplicar (CPF ou celular) ou usa só um nome.
   - Abre a comanda pelo número da pulseira e **lança as taxas do evento do dia**: estacionamento (terra), embarque (rio) e couvert se a entrada for antes do fim da janela.
   - As isenções por categoria do cliente (VIP, sócio…) são aplicadas no fechamento.
+- **Menor de idade:** definido ao abrir a comanda (check-in ou caixa).
+  - Com data de nascimento no cadastro, a idade decide sozinha.
+  - Sem data, a portaria informa a data (fica gravada no cliente) ou só marca "É menor de 18 anos".
+  - A comanda de menor aparece com a faixa vermelha **"MENOR DE IDADE: não servir bebida alcoólica"** para o garçom e o caixa ao lançar o pedido, e com a marca **-18** na lista de comandas.
 - **Check-out:** registra a saída.
   - Comanda aberta **sem nenhum item**: é encerrada automaticamente (cancelada, motivo "Saída sem consumo") e a pessoa sai sem passar no caixa.
   - Comanda aberta com consumo ou com taxas do evento: a saída é **bloqueada** e a pessoa é encaminhada ao caixa.

@@ -36,7 +36,7 @@ public static class CheckinEndpoints
     public sealed record NovoCliente(string Nome, string? Cpf, string? Celular, string? Email, string? Sexo, bool AceitaComunicacao);
 
     public sealed record CheckinInput(int Numero, string EntradaTipo, long? AreaId, long? ClienteId, NovoCliente? NovoCliente,
-        string? Identificacao, string? Observacao);
+        string? Identificacao, string? Observacao, DateTime? DataNascimento = null, bool? MenorIdade = null);
 
     public sealed record CheckoutInput(int Numero);
 
@@ -104,6 +104,8 @@ public static class CheckinEndpoints
             var identificacao = string.IsNullOrWhiteSpace(i.Identificacao) ? null : i.Identificacao.Trim();
             // regra do JetPOA: comanda só para cliente cadastrado
             if (clienteId is null || nomeCliente is null) return Erro("Selecione o cliente ou cadastre-o (nome + CPF ou celular).");
+            var (menor, erroIdade) = await MenorIdade.DefinirAsync(c, tx, clienteId.Value, i.DataNascimento, i.MenorIdade);
+            if (erroIdade is not null) return Erro(erroIdade);
 
             var evento = await c.QuerySingleOrDefaultAsync<Evento>(SelectEvento + " where e.data = trunc(sysdate) and e.ativo = 'S'", transaction: tx);
 
@@ -111,9 +113,9 @@ public static class CheckinEndpoints
             try
             {
                 await c.ExecuteAsync("""
-                    insert into comanda (id, numero, cliente_id, identificacao, entrada_tipo, area_id, observacao, evento_id, aberta_por)
-                    values (:comandaId, :numero, :clienteId, :identificacao, :entrada, :areaId, :obs, :eventoId, :usr)
-                    """, new { comandaId, usr = user.Id(), numero = i.Numero, clienteId, identificacao, entrada, areaId = i.AreaId,
+                    insert into comanda (id, numero, cliente_id, identificacao, entrada_tipo, area_id, observacao, evento_id, aberta_por, menor_idade)
+                    values (:comandaId, :numero, :clienteId, :identificacao, :entrada, :areaId, :obs, :eventoId, :usr, :menor)
+                    """, new { comandaId, usr = user.Id(), numero = i.Numero, clienteId, identificacao, entrada, areaId = i.AreaId, menor,
                               obs = string.IsNullOrWhiteSpace(i.Observacao) ? null : i.Observacao.Trim(), eventoId = evento?.Id }, tx);
             }
             catch (OracleException e) when (e.Number == 1)
@@ -140,6 +142,7 @@ public static class CheckinEndpoints
             return Results.Ok(new
             {
                 comandaId, numero = i.Numero, entrada, cliente = nomeCliente ?? identificacao, evento = evento?.Nome,
+                menorIdade = menor == "S",
                 taxas = taxas.Select(t => new { t.Nome, valor = t.PrecoVenda })
             });
         });

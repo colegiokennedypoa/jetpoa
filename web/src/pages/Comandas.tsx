@@ -4,6 +4,7 @@ import { useSessao } from '../sessao'
 import Lancamento from '../components/Lancamento'
 import FecharConta from '../components/FecharConta'
 import BuscaCliente from '../components/BuscaCliente'
+import { AvisoMenor, IdadeCliente, SEM_IDADE } from '../components/Idade'
 
 const IMPRESSAO: Record<string, [string, string]> = {
   P: ['Na fila', 'tag pend'],
@@ -41,7 +42,7 @@ export default function Comandas() {
           <button key={c.id} className={'comanda-card' + (c.id === selId ? ' sel' : '')} onClick={() => { setSelId(c.id); setAbrindo(false) }}>
             <span className="num">{c.numero}</span>
             <span className="info">
-              <b>{c.identificacao ?? '—'}</b>
+              <b>{c.identificacao ?? '—'}{c.menorIdade === 'S' && <span className="tag menor" title="Menor de idade">-18</span>}</b>
               <small>{c.entradaTipo === 'R' ? 'Rio' : 'Terra'}{c.area ? ` · ${c.area}` : ''} · {c.fechadaEm ? `fechada ${hora(c.fechadaEm)}` : `desde ${hora(c.abertaEm)}`}</small>
             </span>
             <span className="valor">{brl(c.valorTotal ?? c.total)}{c.enviosComErro > 0 && situacao === 'A' && <span className="tag erro" title="Falha de impressão">!</span>}</span>
@@ -75,8 +76,10 @@ function AbrirComanda({ onAberta, onCancelar }: { onAberta: (id: number) => void
   const [areaId, setAreaId] = useState<number | null>(null)
   const [cliente, setCliente] = useState<Cliente | null>(null)
   const [erro, setErro] = useState<string>()
+  const [idade, setIdade] = useState(SEM_IDADE)
 
   useEffect(() => { api.areas().then(setAreas).catch(() => {}) }, [])
+  useEffect(() => setIdade(SEM_IDADE), [cliente])
 
   const salvar = async (e: FormEvent) => {
     e.preventDefault()
@@ -84,7 +87,7 @@ function AbrirComanda({ onAberta, onCancelar }: { onAberta: (id: number) => void
     if (!cliente) { setErro('Selecione ou cadastre o cliente antes de abrir a comanda.'); return }
     try {
       const r = await api.abrirComanda({
-        numero: Number(numero), clienteId: cliente.id, identificacao: null, entradaTipo: entrada, areaId,
+        numero: Number(numero), clienteId: cliente.id, identificacao: null, entradaTipo: entrada, areaId, ...idade,
       })
       onAberta(r.id)
     } catch (err) {
@@ -112,6 +115,7 @@ function AbrirComanda({ onAberta, onCancelar }: { onAberta: (id: number) => void
         <div className="largo campo">
           <span className="rotulo">Cliente* (obrigatório)</span>
           <BuscaCliente cliente={cliente} onCliente={setCliente} />
+          {cliente && <IdadeCliente cliente={cliente} valor={idade} onChange={setIdade} />}
         </div>
       </div>
       {erro && <p className="erro">{erro}</p>}
@@ -220,6 +224,7 @@ function DetalheComanda({ id, onMudou, onMsg, onEncerrada }: {
           </span>
         ) : <span className="tag ok">{c.situacao === 'F' ? 'Fechada' : 'Cancelada'}</span>}
       </div>
+      <AvisoMenor comanda={c} />
 
       {c.clienteId == null && c.situacao !== 'C' && (
         <div className="cartao alerta-box">

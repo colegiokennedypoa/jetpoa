@@ -60,6 +60,8 @@ export type ComandaResumo = {
   clienteCategoria: string | null; entradaTipo: 'T' | 'R'; areaId: number | null; area: string | null
   situacao: string; observacao: string | null; abertaEm: string; total: number; qtdItens: number; enviosComErro: number
   clienteCpf: string | null; valorTotal: number | null; fechadaEm: string | null
+  /** 'S' = cliente menor de 18 anos na abertura. */
+  menorIdade: 'S' | 'N'; clienteNascimento: string | null
 }
 
 export type Usuario = {
@@ -121,7 +123,9 @@ export type EventoInput = {
   data: string; nome: string; produtoTerraId: number | null; produtoRioId: number | null
   couvertProdutoId: number | null; couvertInicio: string | null; couvertFim: string | null; ativo: boolean
 }
-export type CheckinResultado = { comandaId: number; numero: number; entrada: string; cliente: string; evento: string | null; taxas: { nome: string; valor: number }[] }
+export type CheckinResultado = { comandaId: number; numero: number; entrada: string; cliente: string; evento: string | null; menorIdade: boolean; taxas: { nome: string; valor: number }[] }
+/** Idade na abertura: data de nascimento (grava no cliente se ele não tinha) ou só a declaração de menor. */
+export type IdadeAbertura = { dataNascimento: string | null; menorIdade: boolean }
 export type ItemEstoque = {
   id: number; nome: string; categoria: string; unidade: string; estoqueAtual: number; estoqueMinimo: number | null
   precoCusto: number | null; precoVenda: number; comprar: number | null; vendidoHoje: number; ultimoMovimento: string | null
@@ -236,7 +240,7 @@ export const api = {
   comandas: (situacao: 'A' | 'F' = 'A') => req<ComandaResumo[]>(`/api/comandas?situacao=${situacao}`),
   comanda: (id: number) => req<{ comanda: ComandaResumo; itens: ComandaItem[] }>(`/api/comandas/${id}`),
   comandaPorNumero: (n: number) => req<ComandaResumo>(`/api/comandas/numero/${n}`),
-  abrirComanda: (c: { numero: number; clienteId: number | null; identificacao: string | null; entradaTipo: 'T' | 'R'; areaId: number | null }) =>
+  abrirComanda: (c: { numero: number; clienteId: number | null; identificacao: string | null; entradaTipo: 'T' | 'R'; areaId: number | null } & IdadeAbertura) =>
     req<{ id: number }>('/api/comandas', { method: 'POST', body: JSON.stringify(c) }),
   lancar: (id: number, garcomId: number | null, origem: 'CAIXA' | 'GARCOM', itens: ItemCarrinho[]) =>
     req<{ lancados: number; envios: number[] }>(`/api/comandas/${id}/itens`, {
@@ -280,7 +284,7 @@ export const api = {
     numero: number; entradaTipo: 'T' | 'R'; areaId: number | null; clienteId: number | null
     novoCliente: { nome: string; cpf: string | null; celular: string | null; email: string | null; sexo: string | null; aceitaComunicacao: boolean } | null
     identificacao: string | null; observacao: string | null
-  }) => req<CheckinResultado>('/api/checkin', { method: 'POST', body: JSON.stringify(i) }),
+  } & IdadeAbertura) => req<CheckinResultado>('/api/checkin', { method: 'POST', body: JSON.stringify(i) }),
   checkout: (numero: number) => req<{ numero: number; cliente: string; situacao: string; total: number; semConsumo?: boolean }>('/api/checkout', { method: 'POST', body: JSON.stringify({ numero }) }),
   presentes: () => req<{ entrada: string; quantidade: number }[]>('/api/checkin/presentes'),
 

@@ -45,6 +45,10 @@ tr.inativo td { color: var(--muted); text-decoration: line-through; }
 
 .erro { color: var(--err); }
 .ok { color: var(--ok-text); }
+.aviso-menor { background: var(--err); color: #fff; font-weight: 700; padding: 0.45rem 0.8rem; border-radius: 6px; margin: 0.4rem 0; letter-spacing: 0.02em; }
+.tag.menor { background: var(--err); color: #fff; margin-left: 0.4rem; }
+.idade-abertura { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; align-items: end; margin-top: 0.5rem; }
+.idade-abertura .aviso-menor { margin: 0; }
 input.invalido { border-color: var(--err); outline-color: var(--err); }
 .erro-campo { display: block; color: var(--err); font-size: 0.8rem; font-weight: 600; margin-top: 0.15rem; }
 

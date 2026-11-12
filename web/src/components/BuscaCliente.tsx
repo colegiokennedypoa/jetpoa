@@ -12,7 +12,7 @@ export default function BuscaCliente({ cliente, onCliente, autoFocus }: {
   const [busca, setBusca] = useState('')
   const [sugestoes, setSugestoes] = useState<Cliente[]>([])
   const [novo, setNovo] = useState(false)
-  const [n, setN] = useState({ nome: '', cpf: '', celular: '', aceita: false })
+  const [n, setN] = useState({ nome: '', cpf: '', celular: '', nasc: '', aceita: false })
   const [cpfDono, setCpfDono] = useState<Cliente | null>(null)
   const [erro, setErro] = useState<string>()
   const [salvando, setSalvando] = useState(false)
@@ -39,7 +39,7 @@ export default function BuscaCliente({ cliente, onCliente, autoFocus }: {
 
   const abrirNovo = () => {
     const d = soDigitos(busca)
-    setN({ nome: d.length >= 8 ? '' : busca.trim(), cpf: d.length === 11 ? mascaraCpf(d) : '', celular: d.length >= 10 && d.length !== 11 ? d : '', aceita: false })
+    setN({ nome: d.length >= 8 ? '' : busca.trim(), cpf: d.length === 11 ? mascaraCpf(d) : '', celular: d.length >= 10 && d.length !== 11 ? d : '', nasc: '', aceita: false })
     setNovo(true); setErro(undefined); setCpfTocado(d.length === 11)
   }
 
@@ -54,7 +54,7 @@ export default function BuscaCliente({ cliente, onCliente, autoFocus }: {
     try {
       const r = await api.criarCliente({
         cpf: soDigitos(n.cpf) || null, nome: n.nome.trim(), celular: soDigitos(n.celular) || null, email: null,
-        dataNascimento: null, sexo: null, categoriaId: null, aceitaComunicacao: n.aceita, observacao: null, ativo: true,
+        dataNascimento: n.nasc || null, sexo: null, categoriaId: null, aceitaComunicacao: n.aceita, observacao: null, ativo: true,
       })
       onCliente(await api.cliente(r.id))
       setNovo(false); setBusca('')
@@ -80,6 +80,7 @@ export default function BuscaCliente({ cliente, onCliente, autoFocus }: {
             className={cpfErro ? 'invalido' : ''} aria-invalid={!!cpfErro} />
             {cpfErro && <small className="erro-campo">{cpfErro}</small>}</label>
           <label>Celular (DDD)<input value={n.celular} onChange={e => setN({ ...n, celular: e.target.value })} inputMode="tel" /></label>
+          <label>Nascimento<input type="date" value={n.nasc} max={new Date().toISOString().slice(0, 10)} onChange={e => setN({ ...n, nasc: e.target.value })} /></label>
         </div>
         <label className="check"><input type="checkbox" checked={n.aceita} onChange={e => setN({ ...n, aceita: e.target.checked })} /> Aceita receber comunicações (LGPD)</label>
         {cpfDono && (

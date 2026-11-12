@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { api, brl, type ComandaResumo } from '../api'
 import { useSessao } from '../sessao'
 import Lancamento from '../components/Lancamento'
+import { AvisoMenor } from '../components/Idade'
 
 /**
  * Tela do garçom (celular): cada garçom entra com o próprio login, então o garçom é sempre
@@ -49,6 +50,7 @@ export default function Garcom() {
             <span className="total">{brl(comanda.total)}</span>
             <button className="sec" onClick={() => { setComanda(null); setNumero('') }}>Outra comanda</button>
           </div>
+          <AvisoMenor comanda={comanda} />
           <Lancamento comandaId={comanda.id} origem="GARCOM" garcomFixo={eu.garcomId}
             onLancado={m => { setMsg({ tipo: 'ok', texto: `Comanda ${comanda.numero}: ${m}` }); setComanda(null); setNumero('') }} />
         </>

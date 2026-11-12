@@ -29,6 +29,9 @@ public static class ComandaEndpoints
         public string? ClienteCpf { get; set; }
         public decimal? ValorTotal { get; set; }
         public DateTime? FechadaEm { get; set; }
+        /// <summary>S = cliente menor de 18 anos na abertura (não servir bebida alcoólica).</summary>
+        public string MenorIdade { get; set; } = "N";
+        public DateTime? ClienteNascimento { get; set; }
     }
 
     public sealed class ComandaItem
@@ -53,7 +56,8 @@ public static class ComandaEndpoints
         public decimal ValorDesconto { get; set; }
     }
 
-    public sealed record AbrirComandaInput(int Numero, long? ClienteId, string? Identificacao, string? EntradaTipo, long? AreaId, string? Observacao);
+    public sealed record AbrirComandaInput(int Numero, long? ClienteId, string? Identificacao, string? EntradaTipo, long? AreaId, string? Observacao,
+        DateTime? DataNascimento = null, bool? MenorIdade = null);
     public sealed record AlterarComandaInput(long? ClienteId, string? Identificacao, string? EntradaTipo, long? AreaId, string? Observacao);
     public sealed record LancarItem(long ProdutoId, decimal Quantidade, string? Observacao);
     public sealed record LancarInput(long? GarcomId, string? Origem, List<LancarItem> Itens);
@@ -88,7 +92,7 @@ public static class ComandaEndpoints
                      where i.comanda_id = co.id and i.situacao = 'A'), 0) total,
                (select count(*) from comanda_item i where i.comanda_id = co.id and i.situacao = 'A') qtd_itens,
                (select count(*) from envio_producao e where e.comanda_id = co.id and e.situacao = 'E') envios_com_erro,
-               cl.cpf cliente_cpf, co.valor_total, co.fechada_em
+               cl.cpf cliente_cpf, co.valor_total, co.fechada_em, co.menor_idade, cl.data_nascimento cliente_nascimento
           from comanda co
           left join cliente cl on cl.id = co.cliente_id
           left join cliente_categoria cc on cc.id = cl.categoria_id
@@ -157,17 +161,21 @@ public static class ComandaEndpoints
             var clienteAtivo = await c.ExecuteScalarAsync<string?>("select ativo from cliente where id = :id", new { id = i.ClienteId });
             if (clienteAtivo is null) return Erro("Cliente não encontrado.");
             if (clienteAtivo != "S") return Erro("Cliente inativo.");
-            var id = await c.ExecuteScalarAsync<long>("select sq_comanda.nextval from dual");
+            using var tx = c.BeginTransaction();
+            var (menor, erroIdade) = await MenorIdade.DefinirAsync(c, tx, i.ClienteId.Value, i.DataNascimento, i.MenorIdade);
+            if (erroIdade is not null) return Erro(erroIdade);
+            var id = await c.ExecuteScalarAsync<long>("select sq_comanda.nextval from dual", transaction: tx);
             try
             {
                 await c.ExecuteAsync("""
-                    insert into comanda (id, numero, cliente_id, identificacao, entrada_tipo, area_id, observacao, aberta_por)
-                    values (:id, :numero, :cliente_id, :identificacao, :entrada, :area_id, :observacao, :usr)
+                    insert into comanda (id, numero, cliente_id, identificacao, entrada_tipo, area_id, observacao, aberta_por, menor_idade)
+                    values (:id, :numero, :cliente_id, :identificacao, :entrada, :area_id, :observacao, :usr, :menor)
                     """, new
                 {
                     id, numero = i.Numero, cliente_id = i.ClienteId, identificacao = Limpo(i.Identificacao),
-                    entrada, area_id = i.AreaId, observacao = Limpo(i.Observacao), usr = user.Id()
-                });
+                    entrada, area_id = i.AreaId, observacao = Limpo(i.Observacao), usr = user.Id(), menor
+                }, tx);
+                tx.Commit();
             }
             catch (OracleException e) when (e.Number == 1)
             {

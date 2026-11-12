@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { api, brl, gravarLocal, lerLocal, P, type Area, type Cliente, type Evento, type ProdutoResumo } from '../api'
 import BuscaCliente from '../components/BuscaCliente'
+import { IdadeCliente, SEM_IDADE } from '../components/Idade'
 import { useSessao } from '../sessao'
 
 const CHAVE_ENTRADA = 'jetpoa.checkin.entrada'
@@ -58,8 +59,10 @@ function Entrada({ entrada, onMsg }: { entrada: 'T' | 'R'; onMsg: (m: Msg) => vo
   const [areaId, setAreaId] = useState<number | null>(null)
   const [cliente, setCliente] = useState<Cliente | null>(null)
   const [enviando, setEnviando] = useState(false)
+  const [idade, setIdade] = useState(SEM_IDADE)
 
   useEffect(() => { api.areas().then(setAreas).catch(() => {}) }, [])
+  useEffect(() => setIdade(SEM_IDADE), [cliente])
 
   const campoNumero = useRef<HTMLInputElement>(null)
   // pronto para o próximo: limpa pulseira, área e cliente e volta o cursor para a pulseira
@@ -72,9 +75,10 @@ function Entrada({ entrada, onMsg }: { entrada: 'T' | 'R'; onMsg: (m: Msg) => vo
     try {
       const r = await api.checkin({
         numero: Number(numero), entradaTipo: entrada, areaId, clienteId: cliente.id,
-        novoCliente: null, identificacao: null, observacao: null,
+        novoCliente: null, identificacao: null, observacao: null, ...idade,
       })
-      onMsg({ tipo: 'ok', texto: `Comanda ${r.numero} aberta para ${r.cliente} (${r.entrada === 'R' ? 'Rio' : 'Terra'})` + (r.taxas.length ? ` · lançado: ${r.taxas.map(t => `${t.nome} ${brl(t.valor)}`).join(', ')}` : '') })
+      onMsg({ tipo: 'ok', texto: `Comanda ${r.numero} aberta para ${r.cliente} (${r.entrada === 'R' ? 'Rio' : 'Terra'})`
+        + (r.menorIdade ? ' · MENOR DE IDADE' : '') + (r.taxas.length ? ` · lançado: ${r.taxas.map(t => `${t.nome} ${brl(t.valor)}`).join(', ')}` : '') })
       limpar()
     } catch (err) {
       onMsg({ tipo: 'erro', texto: (err as Error).message })
@@ -96,6 +100,7 @@ function Entrada({ entrada, onMsg }: { entrada: 'T' | 'R'; onMsg: (m: Msg) => vo
         <div className="largo campo">
           <span className="rotulo">Cliente* (obrigatório)</span>
           <BuscaCliente cliente={cliente} onCliente={setCliente} />
+          {cliente && <IdadeCliente cliente={cliente} valor={idade} onChange={setIdade} />}
         </div>
       </div>
       <div className="acoes">
