@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api, type Cliente } from '../api'
-
-const soDigitos = (s: string) => s.replace(/\D/g, '')
+import { cpfValido, erroCpf, mascaraCpf, soDigitos } from '../documento'
 
 /**
  * Seleção obrigatória de cliente: busca no cadastro (nome, CPF ou celular) ou cadastro rápido.
@@ -17,6 +16,8 @@ export default function BuscaCliente({ cliente, onCliente, autoFocus }: {
   const [cpfDono, setCpfDono] = useState<Cliente | null>(null)
   const [erro, setErro] = useState<string>()
   const [salvando, setSalvando] = useState(false)
+  const [cpfTocado, setCpfTocado] = useState(false)
+  const cpfErro = erroCpf(n.cpf, cpfTocado)
 
   // cliente escolhido (ou limpo pela tela após o check-in): a busca começa do zero
   useEffect(() => { setBusca(''); setSugestoes([]); setNovo(false); setErro(undefined) }, [cliente])
@@ -30,7 +31,7 @@ export default function BuscaCliente({ cliente, onCliente, autoFocus }: {
   // CPF digitado no cadastro rápido: avisa na hora se já existe
   useEffect(() => {
     const cpf = soDigitos(n.cpf)
-    if (!novo || cpf.length !== 11) { setCpfDono(null); return }
+    if (!novo || !cpfValido(cpf)) { setCpfDono(null); return }
     let vivo = true
     api.clientePorCpf(cpf).then(c => { if (vivo) setCpfDono(c) })
     return () => { vivo = false }
@@ -38,14 +39,16 @@ export default function BuscaCliente({ cliente, onCliente, autoFocus }: {
 
   const abrirNovo = () => {
     const d = soDigitos(busca)
-    setN({ nome: d.length >= 8 ? '' : busca.trim(), cpf: d.length === 11 ? d : '', celular: d.length >= 10 && d.length !== 11 ? d : '', aceita: false })
-    setNovo(true); setErro(undefined)
+    setN({ nome: d.length >= 8 ? '' : busca.trim(), cpf: d.length === 11 ? mascaraCpf(d) : '', celular: d.length >= 10 && d.length !== 11 ? d : '', aceita: false })
+    setNovo(true); setErro(undefined); setCpfTocado(d.length === 11)
   }
 
   const cadastrar = async () => {
     setErro(undefined)
     if (n.nome.trim().length < 2) { setErro('Informe o nome.'); return }
     if (!soDigitos(n.cpf) && !soDigitos(n.celular)) { setErro('Informe CPF ou celular.'); return }
+    const e1 = erroCpf(n.cpf)
+    if (e1) { setCpfTocado(true); setErro(e1); return }
     if (cpfDono) return
     setSalvando(true)
     try {
@@ -72,7 +75,10 @@ export default function BuscaCliente({ cliente, onCliente, autoFocus }: {
       <div className="cadastro-rapido">
         <div className="grade">
           <label>Nome*<input value={n.nome} onChange={e => setN({ ...n, nome: e.target.value })} autoFocus /></label>
-          <label>CPF<input value={n.cpf} onChange={e => setN({ ...n, cpf: e.target.value })} inputMode="numeric" /></label>
+          <label>CPF<input value={n.cpf} onChange={e => setN({ ...n, cpf: mascaraCpf(e.target.value) })}
+            onBlur={() => setCpfTocado(true)} inputMode="numeric" placeholder="000.000.000-00" maxLength={14}
+            className={cpfErro ? 'invalido' : ''} aria-invalid={!!cpfErro} />
+            {cpfErro && <small className="erro-campo">{cpfErro}</small>}</label>
           <label>Celular (DDD)<input value={n.celular} onChange={e => setN({ ...n, celular: e.target.value })} inputMode="tel" /></label>
         </div>
         <label className="check"><input type="checkbox" checked={n.aceita} onChange={e => setN({ ...n, aceita: e.target.checked })} /> Aceita receber comunicações (LGPD)</label>
@@ -82,7 +88,7 @@ export default function BuscaCliente({ cliente, onCliente, autoFocus }: {
         )}
         {erro && <p className="erro">{erro}</p>}
         <div className="acoes">
-          <button type="button" onClick={cadastrar} disabled={salvando || !!cpfDono}>{salvando ? 'Salvando…' : 'Cadastrar e usar'}</button>
+          <button type="button" onClick={cadastrar} disabled={salvando || !!cpfDono || !!erroCpf(n.cpf, false)}>{salvando ? 'Salvando…' : 'Cadastrar e usar'}</button>
           <button type="button" className="sec" onClick={() => setNovo(false)}>Voltar à busca</button>
         </div>
       </div>

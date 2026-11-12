@@ -4,6 +4,7 @@ import {
   type Apoio, type ComandaItem, type ComandaResumo, type DescontoManual, type Pagamento, type PedidoFechamento, type Simulacao,
 } from '../api'
 import { useSessao } from '../sessao'
+import { erroCpfCnpj, mascaraCpfCnpj, soDigitos } from '../documento'
 
 type Props = {
   comanda: ComandaResumo
@@ -24,7 +25,8 @@ export default function FecharConta({ comanda, itens, onFechada, onVoltar }: Pro
   const [autorizadorId, setAutorizadorId] = useState<number | null>(null)
   const [autorizadorPin, setAutorizadorPin] = useState('')
   const [pagamentos, setPagamentos] = useState<Pagamento[]>([])
-  const [cpfNota, setCpfNota] = useState(comanda.clienteCpf ?? '')
+  const [cpfNota, setCpfNota] = useState(mascaraCpfCnpj(comanda.clienteCpf))
+  const docErro = erroCpfCnpj(cpfNota)
   const [erro, setErro] = useState<string>()
   const [enviando, setEnviando] = useState(false)
 
@@ -74,7 +76,7 @@ export default function FecharConta({ comanda, itens, onFechada, onVoltar }: Pro
         pedido,
         autorizadorId: sim?.exigeAutorizacao ? autorizadorId : null,
         autorizadorPin: sim?.exigeAutorizacao ? autorizadorPin : null,
-        pagamentos, cpfCnpjNota: cpfNota.trim() || null,
+        pagamentos, cpfCnpjNota: soDigitos(cpfNota) || null,
       })
       const nf = r.nfce
       const nota = !nf ? ''
@@ -144,8 +146,10 @@ export default function FecharConta({ comanda, itens, onFechada, onVoltar }: Pro
             onChange={e => setPedido(p => ({ ...p, taxaServicoPct: e.target.value === '' ? null : Number(e.target.value) }))} />
         </label>
         <label className="linha-campo">CPF/CNPJ na nota
-          <input value={cpfNota} onChange={e => setCpfNota(e.target.value)} inputMode="numeric" placeholder="opcional" />
+          <input value={cpfNota} onChange={e => setCpfNota(mascaraCpfCnpj(e.target.value))} inputMode="numeric" placeholder="opcional"
+            maxLength={18} className={docErro ? 'invalido' : ''} aria-invalid={!!docErro} />
         </label>
+        {docErro && <small className="erro-campo">{docErro}</small>}
       </div>
 
       <div className="fech-col">
@@ -212,7 +216,7 @@ export default function FecharConta({ comanda, itens, onFechada, onVoltar }: Pro
           </div>
         )}
         {erro && <p className="erro">{erro}</p>}
-        <button className="enviar" disabled={enviando || !calc || falta !== 0 || (!!sim?.exigeAutorizacao && (!autorizadorId || autorizadorPin.length < 4))} onClick={confirmar}>
+        <button className="enviar" disabled={enviando || !calc || falta !== 0 || !!docErro || (!!sim?.exigeAutorizacao && (!autorizadorId || autorizadorPin.length < 4))} onClick={confirmar}>
           {enviando ? 'Fechando…' : `Fechar conta · ${brl(total)}`}
         </button>
         <button className="sec" onClick={onVoltar}>Voltar</button>

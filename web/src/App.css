@@ -45,6 +45,8 @@ tr.inativo td { color: var(--muted); text-decoration: line-through; }
 
 .erro { color: var(--err); }
 .ok { color: var(--ok-text); }
+input.invalido { border-color: var(--err); outline-color: var(--err); }
+.erro-campo { display: block; color: var(--err); font-size: 0.8rem; font-weight: 600; margin-top: 0.15rem; }
 
 .cartao { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; margin-bottom: 1rem; }
 .cartao h3 { margin: 0 0 0.8rem; }
