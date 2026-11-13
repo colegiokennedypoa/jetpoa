@@ -122,6 +122,7 @@ scripts/                  publicar.ps1, instalar-servico.ps1, atualizar.ps1
 | `09` | login com senha: hash, troca obrigatória, bloqueio, carimbo de segurança, último acesso |
 | `10` | `usuario.garcom_id`: cada login de garçom lança sempre em nome do próprio garçom (único por login) |
 | `11` | `comanda.menor_idade` (S/N), fixado na abertura por `Endpoints/MenorIdade.cs` (nascimento do cliente ou declaração da portaria) |
+| `12` | `envio_producao.mesa` e `comanda.mesa` (texto livre, até 20): mesa de entrega de cada pedido, obrigatória ao lançar, impressa em destaque no ticket de produção; a da comanda é sugerida no próximo pedido |
 
 Todos os scripts até o `10` **já foram aplicados** no banco de produção. As colunas são snake_case e o Dapper mapeia para PascalCase (`MatchNamesWithUnderscores`).
 

@@ -249,7 +249,7 @@ function DetalheComanda({ id, onMudou, onMsg, onEncerrada }: {
       )}
 
       {lancando && (
-        <Lancamento comandaId={c.id} origem="CAIXA" garcomFixo={eu.garcomId ?? undefined}
+        <Lancamento comandaId={c.id} origem="CAIXA" mesaAnterior={c.mesa} garcomFixo={eu.garcomId ?? undefined}
           onLancado={m => { onMsg({ tipo: 'ok', texto: m }); setModo('ver'); carregar(); onMudou() }} />
       )}
 

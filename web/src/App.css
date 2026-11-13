@@ -121,6 +121,10 @@ input.invalido { border-color: var(--err); outline-color: var(--err); }
 .carrinho-item .qtd { display: flex; align-items: center; gap: 0.4rem; }
 .carrinho-item .qtd button { padding: 0.15em 0.6em; }
 .carrinho .enviar { padding: 0.7em; font-size: 1rem; font-weight: 600; }
+.mesa-envio { display: flex; gap: 0.5rem; align-items: stretch; }
+.mesa-envio .mesa { display: flex; flex-direction: column; font-size: 0.8rem; font-weight: 600; color: var(--muted); width: 6.5rem; flex: none; }
+.mesa-envio .mesa input { font-size: 1.05rem; font-weight: 700; padding: 0.4em 0.5em; width: 100%; box-sizing: border-box; }
+.mesa-envio .enviar { flex: 1; }
 .carrinho .enviar:disabled { opacity: 0.5; cursor: default; }
 .lancamento > * { min-width: 0; }   /* chips/produtos não alargam a tela */
 .carrinho-topo {

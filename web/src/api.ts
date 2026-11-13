@@ -62,6 +62,8 @@ export type ComandaResumo = {
   clienteCpf: string | null; valorTotal: number | null; fechadaEm: string | null
   /** 'S' = cliente menor de 18 anos na abertura. */
   menorIdade: 'S' | 'N'; clienteNascimento: string | null
+  /** Última mesa informada num pedido (sugerida no próximo). */
+  mesa: string | null
 }
 
 export type Usuario = {
@@ -169,7 +171,7 @@ export type ComandaItem = {
 }
 
 export type Envio = {
-  id: number; comandaId: number; numero: number; setor: string; tipo: 'P' | 'C' | 'R'
+  id: number; comandaId: number; numero: number; mesa: string | null; setor: string; tipo: 'P' | 'C' | 'R'
   situacao: 'P' | 'I' | 'E'; tentativas: number; ultimoErro: string | null
   criadoEm: string; impressoEm: string | null; qtdItens: number
 }
@@ -242,11 +244,11 @@ export const api = {
   comandaPorNumero: (n: number) => req<ComandaResumo>(`/api/comandas/numero/${n}`),
   abrirComanda: (c: { numero: number; clienteId: number | null; identificacao: string | null; entradaTipo: 'T' | 'R'; areaId: number | null } & IdadeAbertura) =>
     req<{ id: number }>('/api/comandas', { method: 'POST', body: JSON.stringify(c) }),
-  lancar: (id: number, garcomId: number | null, origem: 'CAIXA' | 'GARCOM', itens: ItemCarrinho[]) =>
+  lancar: (id: number, garcomId: number | null, origem: 'CAIXA' | 'GARCOM', mesa: string, itens: ItemCarrinho[]) =>
     req<{ lancados: number; envios: number[] }>(`/api/comandas/${id}/itens`, {
       method: 'POST',
       body: JSON.stringify({
-        garcomId, origem,
+        garcomId, origem, mesa,
         itens: itens.map(i => ({ produtoId: i.produtoId, quantidade: i.quantidade, observacao: i.observacao || null })),
       }),
     }),

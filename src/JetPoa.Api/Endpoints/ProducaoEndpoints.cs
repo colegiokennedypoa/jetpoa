@@ -13,6 +13,7 @@ public static class ProducaoEndpoints
         public long Id { get; set; }
         public long ComandaId { get; set; }
         public int Numero { get; set; }
+        public string? Mesa { get; set; }
         public string Setor { get; set; } = "";
         public string Tipo { get; set; } = "P";
         public string Situacao { get; set; } = "P";
@@ -42,7 +43,7 @@ public static class ProducaoEndpoints
         {
             using var c = await db.OpenAsync(ct);
             return await c.QueryAsync<Envio>("""
-                select e.id, e.comanda_id, co.numero, s.nome setor, e.tipo, e.situacao, e.tentativas,
+                select e.id, e.comanda_id, co.numero, e.mesa, s.nome setor, e.tipo, e.situacao, e.tentativas,
                        e.ultimo_erro, e.criado_em, e.impresso_em,
                        (select count(*) from comanda_item i
                          where (e.tipo = 'C' and i.envio_cancelamento_id = e.id)
@@ -62,8 +63,8 @@ public static class ProducaoEndpoints
         {
             using var c = await db.OpenAsync(ct);
             var n = await c.ExecuteAsync("""
-                insert into envio_producao (comanda_id, setor_producao_id, tipo, envio_origem_id)
-                select comanda_id, setor_producao_id, 'R', case when tipo = 'R' then envio_origem_id else id end
+                insert into envio_producao (comanda_id, setor_producao_id, tipo, envio_origem_id, mesa)
+                select comanda_id, setor_producao_id, 'R', case when tipo = 'R' then envio_origem_id else id end, mesa
                   from envio_producao where id = :id and tipo <> 'C'
                 """, new { id });
             if (n == 0) return Results.NotFound(new { erro = "Envio não encontrado (cancelamentos não são reimpressos)." });

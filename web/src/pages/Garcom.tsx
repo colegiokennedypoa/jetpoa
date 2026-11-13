@@ -51,7 +51,7 @@ export default function Garcom() {
             <button className="sec" onClick={() => { setComanda(null); setNumero('') }}>Outra comanda</button>
           </div>
           <AvisoMenor comanda={comanda} />
-          <Lancamento comandaId={comanda.id} origem="GARCOM" garcomFixo={eu.garcomId}
+          <Lancamento comandaId={comanda.id} origem="GARCOM" mesaAnterior={comanda.mesa} garcomFixo={eu.garcomId}
             onLancado={m => { setMsg({ tipo: 'ok', texto: `Comanda ${comanda.numero}: ${m}` }); setComanda(null); setNumero('') }} />
         </>
       )}

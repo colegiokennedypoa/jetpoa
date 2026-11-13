@@ -32,6 +32,7 @@ public sealed class ImpressaoProducao(Db db, ILogger<ImpressaoProducao> log) : B
         public int? ImpressoraPorta { get; set; }
         public int ColunasImpressao { get; set; } = 48;
         public int Numero { get; set; }
+        public string? Mesa { get; set; }
         public string? Identificacao { get; set; }
         public string EntradaTipo { get; set; } = "T";
         public string? Area { get; set; }
@@ -70,7 +71,7 @@ public sealed class ImpressaoProducao(Db db, ILogger<ImpressaoProducao> log) : B
         using var c = await db.OpenAsync(ct);
         // pendentes + erros ainda dentro do limite, com espera crescente entre tentativas (20s * tentativas)
         var pendentes = (await c.QueryAsync<EnvioPendente>("""
-            select e.id, e.tipo, e.tentativas, e.envio_origem_id, e.criado_em,
+            select e.id, e.tipo, e.tentativas, e.envio_origem_id, e.criado_em, e.mesa,
                    s.nome setor_nome, s.imprime, s.impressora_host, s.impressora_porta, s.colunas_impressao,
                    co.numero, nvl(cl.nome, co.identificacao) identificacao, co.entrada_tipo, a.nome area
               from envio_producao e
@@ -147,6 +148,13 @@ public sealed class ImpressaoProducao(Db db, ILogger<ImpressaoProducao> log) : B
         if (env.Tipo != "P") t.Linha(env.SetorNome.ToUpperInvariant());
         t.Negrito(false).Linha();
 
+        // mesa em destaque: é onde o pedido deve ser entregue
+        if (!string.IsNullOrWhiteSpace(env.Mesa))
+        {
+            t.Centro().Negrito(true).Tamanho(0x11);
+            foreach (var l in EscPos.Quebrar("MESA " + env.Mesa.Trim().ToUpperInvariant(), t.Colunas / 2)) t.Linha(l);
+            t.Tamanho(0x00).Negrito(false).Linha();
+        }
         t.Esquerda().Negrito(true).Tamanho(0x11).Linha($"COMANDA {env.Numero}").Tamanho(0x00).Negrito(false);
         if (!string.IsNullOrWhiteSpace(env.Identificacao)) t.Linha(env.Identificacao.Trim());
         var local = (env.EntradaTipo == "R" ? "RIO" : "TERRA") + (env.Area is null ? "" : $" - {env.Area}");

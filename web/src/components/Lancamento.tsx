@@ -5,11 +5,13 @@ type Props = {
   comandaId: number
   origem: 'CAIXA' | 'GARCOM'
   garcomFixo?: number | null
+  /** Mesa do último pedido da comanda: vem sugerida. */
+  mesaAnterior?: string | null
   onLancado: (msg: string) => void
 }
 
 /** Seleção de produtos + carrinho + envio para a comanda (usado no caixa e no app do garçom). */
-export default function Lancamento({ comandaId, origem, garcomFixo, onLancado }: Props) {
+export default function Lancamento({ comandaId, origem, garcomFixo, mesaAnterior, onLancado }: Props) {
   const [produtos, setProdutos] = useState<ProdutoResumo[]>([])
   const [garcons, setGarcons] = useState<Garcom[]>([])
   const [garcomId, setGarcomId] = useState<number | null>(garcomFixo ?? null)
@@ -18,6 +20,7 @@ export default function Lancamento({ comandaId, origem, garcomFixo, onLancado }:
   const [carrinho, setCarrinho] = useState<ItemCarrinho[]>([])
   const [enviando, setEnviando] = useState(false)
   const [erro, setErro] = useState<string>()
+  const [mesa, setMesa] = useState(mesaAnterior ?? '')
   const [aberto, setAberto] = useState(false)   // celular: pedido aberto sobre a tela (barra do rodapé)
 
   useEffect(() => {
@@ -26,6 +29,7 @@ export default function Lancamento({ comandaId, origem, garcomFixo, onLancado }:
   }, [garcomFixo])
 
   useEffect(() => { if (garcomFixo !== undefined) setGarcomId(garcomFixo) }, [garcomFixo])
+  useEffect(() => { setMesa(mesaAnterior ?? '') }, [comandaId, mesaAnterior])
 
   const categorias = useMemo(() => [...new Set(produtos.map(p => p.categoria))], [produtos])
   const filtrados = useMemo(() => {
@@ -55,11 +59,12 @@ export default function Lancamento({ comandaId, origem, garcomFixo, onLancado }:
 
   const enviar = async () => {
     if (carrinho.length === 0) return
+    if (!mesa.trim()) { setErro('Informe a mesa onde entregar o pedido.'); return }
     setEnviando(true); setErro(undefined)
     try {
-      const r = await api.lancar(comandaId, garcomId, origem, carrinho)
+      const r = await api.lancar(comandaId, garcomId, origem, mesa.trim(), carrinho)
       setCarrinho([]); setBusca(''); setAberto(false)
-      onLancado(`${r.lancados} item(ns) lançados${r.envios.length ? ` · ${r.envios.length} envio(s) para produção` : ''}.`)
+      onLancado(`${r.lancados} item(ns) lançados · mesa ${mesa.trim()}${r.envios.length ? ` · ${r.envios.length} envio(s) para produção` : ''}.`)
     } catch (e) {
       setErro((e as Error).message)
     } finally {
@@ -120,9 +125,15 @@ export default function Lancamento({ comandaId, origem, garcomFixo, onLancado }:
         ))}
         </div>
         {erro && <p className="erro">{erro}</p>}
-        <button className="enviar" disabled={carrinho.length === 0 || enviando} onClick={enviar}>
-          {enviando ? 'Enviando…' : `Enviar ${carrinho.length ? '· ' + brl(total) : ''}`}
-        </button>
+        <div className="mesa-envio">
+          <label className="mesa">Mesa
+            <input value={mesa} onChange={e => setMesa(e.target.value)} maxLength={20} placeholder="ex.: 12"
+              title={mesaAnterior ? `Último pedido: mesa ${mesaAnterior}` : undefined} />
+          </label>
+          <button className="enviar" disabled={carrinho.length === 0 || enviando} onClick={enviar}>
+            {enviando ? 'Enviando…' : `Enviar ${carrinho.length ? '· ' + brl(total) : ''}`}
+          </button>
+        </div>
       </div>
     </div>
   )

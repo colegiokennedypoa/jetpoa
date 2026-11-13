@@ -41,11 +41,11 @@ export default function Producao() {
         <span className="contador">{soErros ? 'todos não impressos' : 'últimas 12 horas'}</span>
       </div>
       <table>
-        <thead><tr><th>#</th><th>Hora</th><th>Comanda</th><th>Setor</th><th>Tipo</th><th className="num">Itens</th><th>Situação</th><th>Detalhe</th><th></th></tr></thead>
+        <thead><tr><th>#</th><th>Hora</th><th>Comanda</th><th>Mesa</th><th>Setor</th><th>Tipo</th><th className="num">Itens</th><th>Situação</th><th>Detalhe</th><th></th></tr></thead>
         <tbody>
           {envios.map(e => (
             <tr key={e.id}>
-              <td>{e.id}</td><td>{hora(e.criadoEm)}</td><td>{e.numero}</td><td>{e.setor}</td><td>{TIPO[e.tipo]}</td>
+              <td>{e.id}</td><td>{hora(e.criadoEm)}</td><td>{e.numero}</td><td>{e.mesa ?? ''}</td><td>{e.setor}</td><td>{TIPO[e.tipo]}</td>
               <td className="num">{e.qtdItens}</td>
               <td><span className={SIT[e.situacao][1]}>{SIT[e.situacao][0]}</span>{e.tentativas > 1 && <small> ({e.tentativas}x)</small>}</td>
               <td className="detalhe-erro">{e.ultimoErro ?? (e.impressoEm ? `impresso ${hora(e.impressoEm)}` : '')}</td>

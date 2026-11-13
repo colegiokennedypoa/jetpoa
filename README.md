@@ -20,7 +20,7 @@ Substitui o sistema Forms 6i do bistrô. Análise e proposta: [docs/01-analise-e
 6. `db/04_fase3_fechamento.sql`: como BISTRO (fechamento, descontos, isenções, pagamentos)
 7. `db/05_fase4_nfce.sql`: como BISTRO (emitente, numeração, NFC-e, inutilização, impressora do caixa)
 8. `db/06_numeracao_por_ambiente.sql` e `db/07_fase5_checkin_estoque.sql`: como BISTRO
-9. `db/08_comanda_exige_cliente.sql`, `db/09_login_senha.sql`, `db/10_usuario_garcom.sql` e `db/11_comanda_menor_idade.sql`: como BISTRO
+9. `db/08_comanda_exige_cliente.sql`, `db/09_login_senha.sql`, `db/10_usuario_garcom.sql`, `db/11_comanda_menor_idade.sql` e `db/12_mesa_no_pedido.sql`: como BISTRO
 
 ## Check-in, estoque e relatórios (Fase 5)
 - **Check-in (portaria TERRA / RIO):** cada aparelho lembra a sua portaria.

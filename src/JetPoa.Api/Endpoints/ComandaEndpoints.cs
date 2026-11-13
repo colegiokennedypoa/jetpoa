@@ -32,6 +32,8 @@ public static class ComandaEndpoints
         /// <summary>S = cliente menor de 18 anos na abertura (não servir bebida alcoólica).</summary>
         public string MenorIdade { get; set; } = "N";
         public DateTime? ClienteNascimento { get; set; }
+        /// <summary>Última mesa informada num pedido (sugerida no próximo).</summary>
+        public string? Mesa { get; set; }
     }
 
     public sealed class ComandaItem
@@ -60,7 +62,8 @@ public static class ComandaEndpoints
         DateTime? DataNascimento = null, bool? MenorIdade = null);
     public sealed record AlterarComandaInput(long? ClienteId, string? Identificacao, string? EntradaTipo, long? AreaId, string? Observacao);
     public sealed record LancarItem(long ProdutoId, decimal Quantidade, string? Observacao);
-    public sealed record LancarInput(long? GarcomId, string? Origem, List<LancarItem> Itens);
+    public sealed record LancarInput(long? GarcomId, string? Origem, List<LancarItem> Itens, string? Mesa = null);
+    public const int MesaTamanhoMax = 20;
     public sealed record CancelarItemInput(string Motivo);
     public sealed record VincularClienteInput(long ClienteId);
 
@@ -92,7 +95,8 @@ public static class ComandaEndpoints
                      where i.comanda_id = co.id and i.situacao = 'A'), 0) total,
                (select count(*) from comanda_item i where i.comanda_id = co.id and i.situacao = 'A') qtd_itens,
                (select count(*) from envio_producao e where e.comanda_id = co.id and e.situacao = 'E') envios_com_erro,
-               cl.cpf cliente_cpf, co.valor_total, co.fechada_em, co.menor_idade, cl.data_nascimento cliente_nascimento
+               cl.cpf cliente_cpf, co.valor_total, co.fechada_em, co.menor_idade, cl.data_nascimento cliente_nascimento,
+               co.mesa
           from comanda co
           left join cliente cl on cl.id = co.cliente_id
           left join cliente_categoria cc on cc.id = cl.categoria_id
@@ -236,6 +240,10 @@ public static class ComandaEndpoints
             if (itens.Count == 0) return Erro("Nenhum item para lançar.");
             if (itens.Any(x => x.Quantidade > 999)) return Erro("Quantidade inválida.");
             var origem = string.Equals(input.Origem, "GARCOM", StringComparison.OrdinalIgnoreCase) ? "GARCOM" : "CAIXA";
+            // mesa: texto livre (ex.: "12", "Deck 3"); vai no ticket de cada setor para saber onde entregar
+            var mesa = Limpo(input.Mesa);
+            if (mesa is null) return Erro("Informe a mesa onde o pedido deve ser entregue.");
+            if (mesa.Length > MesaTamanhoMax) return Erro($"Mesa com no máximo {MesaTamanhoMax} caracteres.");
 
             using var c = await db.OpenAsync(ct);
             using var tx = c.BeginTransaction();
@@ -288,10 +296,11 @@ public static class ComandaEndpoints
             {
                 var envioId = await c.ExecuteScalarAsync<long>("select sq_envio_producao.nextval from dual", transaction: tx);
                 await c.ExecuteAsync(
-                    "insert into envio_producao (id, comanda_id, setor_producao_id, tipo) values (:envioId, :id, :setor, 'P')",
-                    new { envioId, id, setor }, tx);
+                    "insert into envio_producao (id, comanda_id, setor_producao_id, tipo, mesa) values (:envioId, :id, :setor, 'P', :mesa)",
+                    new { envioId, id, setor, mesa }, tx);
                 envioPorSetor[setor] = envioId;
             }
+            await c.ExecuteAsync("update comanda set mesa = :mesa where id = :id", new { id, mesa }, tx);
 
             foreach (var x in itens)
             {
@@ -340,8 +349,11 @@ public static class ComandaEndpoints
             {
                 envioCanc = await c.ExecuteScalarAsync<long>("select sq_envio_producao.nextval from dual", transaction: tx);
                 await c.ExecuteAsync(
-                    "insert into envio_producao (id, comanda_id, setor_producao_id, tipo) values (:envioCanc, :id, :setor, 'C')",
-                    new { envioCanc, id, setor = item.SetorId }, tx);
+                    """
+                    insert into envio_producao (id, comanda_id, setor_producao_id, tipo, mesa)
+                    select :envioCanc, :id, :setor, 'C', mesa from envio_producao where id = :envioOrig
+                    """,
+                    new { envioCanc, id, setor = item.SetorId, envioOrig = item.EnvioId }, tx);
             }
 
             await c.ExecuteAsync("""
