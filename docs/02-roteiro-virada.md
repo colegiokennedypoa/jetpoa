@@ -33,7 +33,7 @@ A tela **Implantação** mostra o checklist ao vivo. Este roteiro diz **quando**
    > ```
    > Para publicar sem o script: `cd web; npm run build; cd ..` e depois `dotnet publish src\JetPoa.Api\JetPoa.Api.csproj -c Release -o C:\Projeto\JetPOA\app`.
 2. **Usuários** (tela Usuários): Administrador → Gerentes → Caixas → Garçons/Portaria. Cada um recebe uma senha provisória e troca no primeiro acesso. Gerentes cadastram também um PIN de autorização.
-3. **Impressoras** (tela Produção): conferir o IP de Cozinha, Bar e Garçom, cadastrar o **Caixa** (DANFE) e usar "Imprimir teste" em cada uma.
+3. **Impressoras** (tela Produção): conferir o IP de Cozinha, Bar e Garçom e usar "Imprimir teste" em cada uma. O **Caixa** (DANFE e conferência) imprime na impressora padrão do Windows do computador do caixa: deixe a térmica como padrão e, de preferência, abra o navegador com `--kiosk-printing`.
    - Se a Bematech imprimir caracteres estranhos, colocar a impressora em modo **ESC/POS** (menu da impressora ou utilitário Bematech).
 4. **Contador** (tela Produtos → "Só com pendência fiscal"): completar NCM, CFOP, CSOSN e CST dos produtos pendentes (77 em 11/11).
 5. **Clientes** (tela Implantação → "Prévia: importar clientes" → "Importar"): cerca de 2.545 clientes do mailing, reservas e comandas antigas, sem duplicar. Ninguém entra como "aceita comunicação": o consentimento LGPD é colhido no check-in.

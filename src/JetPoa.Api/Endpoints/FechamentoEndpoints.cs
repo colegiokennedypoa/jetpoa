@@ -94,7 +94,18 @@ public static class FechamentoEndpoints
             return Results.Ok(new { calculo = r, limiteOperadorPct = op.LimiteDescontoPct, exigeAutorizacao = exige });
         });
 
-        gFechar.MapPost("/comandas/{id:long}/fechar", async (ClaimsPrincipal user, Db db, Fiscal.NfceService nfce, Microsoft.Extensions.Options.IOptionsMonitor<Fiscal.NfceOptions> nfceOpt,
+        // Conferência (pré-conta): o cliente confere os itens antes de pagar. Página impressa pelo navegador
+        // do caixa, na impressora padrão da máquina.
+        gFechar.MapGet("/comandas/{id:long}/conferencia", async (Db db, long id, CancellationToken ct) =>
+        {
+            using var c = await db.OpenAsync(ct);
+            var (dados, erro) = await ConferenciaAsync(c, id);
+            return dados is null
+                ? Results.Content($"<p style='font-family:sans-serif'>{System.Net.WebUtility.HtmlEncode(erro)}</p>", "text/html; charset=utf-8", statusCode: 422)
+                : Results.Content(Impressao.Conferencia.Html(dados), "text/html; charset=utf-8");
+        });
+
+        gFechar.MapPost("/comandas/{id:long}/fechar",async (ClaimsPrincipal user, Db db, Fiscal.NfceService nfce, Microsoft.Extensions.Options.IOptionsMonitor<Fiscal.NfceOptions> nfceOpt,
                                                        long id, FecharInput i, CancellationToken ct) =>
         {
             using var c = await db.OpenAsync(ct);
@@ -219,21 +230,19 @@ public static class FechamentoEndpoints
 
             // NFC-e: a comanda já está fechada; falhas fiscais não desfazem o fechamento (ficam pendentes na tela Fiscal)
             Fiscal.NfceResultado? nota = null;
-            string? erroDanfe = null;
             if (!r.ConsumoInterno && r.Total > 0 && nfceOpt.CurrentValue.EmitirNoFechamento)
             {
                 try
                 {
+                    // o DANFE é impresso pelo navegador do caixa, na impressora padrão da máquina
                     nota = await nfce.EmitirAsync(id, ct);
-                    if (nota.Nova && nota.Id is not null && nota.Situacao is "AUTORIZADA" or "CONTINGENCIA")
-                        erroDanfe = await FiscalEndpoints.ImprimirDanfeAsync(db, nfce, nota.Id.Value, ct);
                 }
                 catch (Exception e)
                 {
                     nota = new Fiscal.NfceResultado("ERRO", Mensagem: "Falha ao emitir NFC-e: " + e.Message);
                 }
             }
-            return Results.Ok(new { id, total = r.Total, troco, descontoTotal = r.DescontoTotal, nfce = nota, erroDanfe });
+            return Results.Ok(new { id, total = r.Total, troco, descontoTotal = r.DescontoTotal, nfce = nota });
         });
 
         // Cancela comanda inteira (ex.: aberta por engano). Com itens ativos exige quem autoriza desconto.
@@ -295,6 +304,19 @@ public static class FechamentoEndpoints
         var categoria = cat is null ? null : new CategoriaCliente(cat.Nome, cat.DescontoPctPadrao,
             cat.IsentaEstacionamento == "S", cat.IsentaEmbarque == "S", cat.IsentaCouvert == "S", cat.IsentaTaxaServico == "S");
         return new Contexto(sit, itens, categoria, await TaxaPadraoAsync(c, tx));
+    }
+
+    private static async Task<(Impressao.Conferencia.Dados? Dados, string? Erro)> ConferenciaAsync(IDbConnection c, long id)
+    {
+        var ctx = await CarregarAsync(c, id, null);
+        if (ctx is null) return (null, "Comanda não encontrada.");
+        if (ctx.Situacao != "A") return (null, "Comanda não está aberta.");
+        var cab = await c.QuerySingleAsync<(decimal Numero, string? Cliente, string? Mesa, DateTime AbertaEm)>("""
+            select co.numero, nvl(cl.nome, co.identificacao), co.mesa, co.aberta_em
+              from comanda co left join cliente cl on cl.id = co.cliente_id where co.id = :id
+            """, new { id });
+        var calculo = Calcular(ctx.Itens, ctx.Categoria, new Pedido(false, null, null, null), ctx.TaxaPadrao);
+        return (new Impressao.Conferencia.Dados((int)cab.Numero, cab.Cliente, cab.Mesa, cab.AbertaEm, ctx.Itens, calculo, DateTime.Now), null);
     }
 
     private static async Task<decimal> TaxaPadraoAsync(IDbConnection c, IDbTransaction? tx)

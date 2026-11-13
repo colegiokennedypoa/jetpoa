@@ -120,16 +120,12 @@ public static class FiscalEndpoints
 
         gEmitir.MapPost("/comandas/{id:long}/emitir", async (NfceService nfce, Db db, long id, CancellationToken ct) =>
         {
-            var r = await nfce.EmitirAsync(id, ct);
-            if (r.Nova && r.Id is not null && r.Situacao is "AUTORIZADA" or "CONTINGENCIA") await ImprimirDanfeAsync(db, nfce, r.Id.Value, ct);
-            return Results.Ok(r);
+            return Results.Ok(await nfce.EmitirAsync(id, ct));
         });
 
         gEmitir.MapPost("/notas/{id:long}/reenviar", async (NfceService nfce, Db db, long id, CancellationToken ct) =>
         {
-            var r = await nfce.ReenviarAsync(id, ct);
-            if (r.Situacao == "AUTORIZADA") await ImprimirDanfeAsync(db, nfce, id, ct);
-            return Results.Ok(r);
+            return Results.Ok(await nfce.ReenviarAsync(id, ct));
         });
 
         gCancelar.MapPost("/notas/{id:long}/cancelar", async (ClaimsPrincipal user, NfceService nfce, Db db, long id, CancelarNotaInput i, CancellationToken ct) =>
@@ -181,29 +177,5 @@ public static class FiscalEndpoints
             var xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" + (n.XmlAutorizado ?? n.Xml);
             return Results.File(Encoding.UTF8.GetBytes(xml), "application/xml", $"{n.Chave}-nfce.xml");
         });
-
-        gEmitir.MapPost("/notas/{id:long}/imprimir", async (NfceService nfce, Db db, long id, CancellationToken ct) =>
-        {
-            var erro = await ImprimirDanfeAsync(db, nfce, id, ct);
-            return erro is null ? Results.Ok(new { ok = true }) : Results.UnprocessableEntity(new { erro });
-        });
-    }
-
-    /// <summary>Imprime o DANFE na impressora do setor CAIXA. Devolve a mensagem de erro (ou null).</summary>
-    public static async Task<string?> ImprimirDanfeAsync(Db db, NfceService nfce, long id, CancellationToken ct)
-    {
-        using var c = await db.OpenAsync(ct);
-        var n = await nfce.ObterAsync(c, id);
-        if (n?.Xml is null) return "Nota não encontrada.";
-        var cx = await c.QuerySingleOrDefaultAsync<(string Imprime, string? Host, decimal? Porta, decimal Colunas)>(
-            "select imprime, impressora_host, impressora_porta, colunas_impressao from setor_producao where codigo = 'CAIXA'");
-        if (cx.Imprime != "S" || string.IsNullOrWhiteSpace(cx.Host)) return "Impressora do caixa não configurada (tela Produção, setor Caixa).";
-        try
-        {
-            var bytes = Danfe.EscPos(Danfe.Ler(n.XmlAutorizado ?? n.Xml, n.Protocolo, n.AutorizadaEm), (int)cx.Colunas);
-            await ImpressoraRede.EnviarAsync(cx.Host, (int)(cx.Porta ?? 9100), bytes, ct);
-            return null;
-        }
-        catch (Exception e) { return e.Message; }
     }
 }

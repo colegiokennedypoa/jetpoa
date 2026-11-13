@@ -30,7 +30,7 @@ export default function Producao() {
       {pode(P.producaoConfigurar) && <>
         <h3>Impressoras por setor</h3>
         <div className="setores">
-          {setores.map(s => <SetorCard key={s.id} setor={s} onMsg={setMsg} />)}
+          {setores.filter(s => s.codigo !== 'CAIXA').map(s => <SetorCard key={s.id} setor={s} onMsg={setMsg} />)}
         </div>
       </>}
       {msg && <p className={msg.tipo}>{msg.texto}</p>}

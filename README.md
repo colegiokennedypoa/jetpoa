@@ -68,7 +68,7 @@ As mesmas chaves também podem vir por variável de ambiente. Valor vazio no arq
   2. desativar o job 401 do Forms (`pk_nfce.job`, a cada 30 min), como DBA: `exec dbms_job.broken(401, true);` e `commit;`.
 - **Pendência herdada:** o Forms tem **583 números da série 1 sem autorização**, que precisam ser inutilizados (tela Fiscal → Inutilizar). A tela recusa faixas que contenham notas autorizadas pelo Forms.
 - **Primeiro uso:** rodar em **homologação** (`Ambiente = 2`), emitir algumas notas, conferir na tela **Fiscal** e só então passar para produção.
-- **Fluxo:** ao fechar a comanda, a NFC-e é emitida e o DANFE sai na impressora do setor **CAIXA** (configurar o IP na tela Produção). Falha fiscal **não** desfaz o fechamento: a comanda aparece em "Comandas fechadas sem NFC-e" na tela Fiscal.
+- **Fluxo:** ao fechar a comanda, a NFC-e é emitida e o DANFE sai pelo navegador, na **impressora padrão do computador** que fechou a conta. Para imprimir sem a janela de impressão, abra o Chrome/Edge do caixa com `--kiosk-printing`. Falha fiscal **não** desfaz o fechamento: a comanda aparece em "Comandas fechadas sem NFC-e" na tela Fiscal.
 - **Antes de numerar**, o sistema valida NCM, CFOP, CSOSN e CST PIS/COFINS de cada produto, incluindo CFOP × CSOSN (500 → 5405; 102 → 5102). Produto inválido não consome número.
 - **Fora da nota:** serviços (tipo S) e taxas (estacionamento, embarque, couvert), além da taxa de serviço. Os pagamentos são rateados para o valor da nota. *Validar com o contador.*
 - **Desconto:** vai em `vDesc` por item (rateio do fechamento). **Forma de pagamento:** `tPag` real (01, 03, 04, 05, 17) com o grupo `card` para cartão e PIX.
@@ -76,6 +76,7 @@ As mesmas chaves também podem vir por variável de ambiente. Valor vazio no arq
   - a nota online fica **VERIFICAR**;
   - é emitida outra em **contingência offline** (tpEmis 9) com o próximo número, e o DANFE sai com o aviso;
   - a cada minuto, a rotina transmite as contingências e consulta as notas a verificar. Se a original foi autorizada, ela é cancelada (substituída); se não chegou na SEFAZ, o número é inutilizado.
+- **Conferência:** na comanda aberta, "Imprimir conferência" imprime os itens agrupados, descontos da categoria, taxa de serviço e total para o cliente conferir antes de pagar (não é documento fiscal). Também sai na impressora padrão do computador.
 - **Tela Fiscal:** status do certificado (dias para vencer), status da SEFAZ, notas das últimas 48h, DANFE (HTML), XML, reimpressão, reenvio de rejeitada, cancelamento e inutilização. Cancelar e inutilizar só aparecem para Gerente/Administrador.
 - **Testes:** `dotnet test` (28 testes). Chave e QR Code conferem com NFC-e autorizada pela SEFAZ-RS. Para conferir o hash do QR Code com o CSC real: `$env:JETPOA_TEST_CSC = "<csc>"`.
 

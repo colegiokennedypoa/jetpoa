@@ -95,7 +95,7 @@ src/JetPoa.Api/
   Data/                   Db (conexões), ArquivoConf (leitor do .conf), Clob
   Domain/                 regras puras e testáveis: Fechamento (rateio, alçada, isenções), Estoque, Documento (CPF/CNPJ), Senha (hash)
   Endpoints/              uma classe por área (Comanda, Fechamento, Cliente, Checkin, Estoque, Produto, Producao, Fiscal, Relatorio, Usuario, Implantacao, Catalogo)
-  Fiscal/                 NFC-e: NfceXml (monta o XML 4.00), Assinador, SefazClient (SOAP/TLS), NfceService (fluxo, numeração, contingência), NfceWorker (rotina de 1 min), Danfe (ESC/POS e HTML)
+  Fiscal/                 NFC-e: NfceXml (monta o XML 4.00), Assinador, SefazClient (SOAP/TLS), NfceService (fluxo, numeração, contingência), NfceWorker (rotina de 1 min), Danfe (HTML impresso pelo navegador do caixa; ESC/POS mantido sem uso)
   Impressao/              EscPos, ImpressoraRede (TCP 9100), ImpressaoProducao (fila em segundo plano com novas tentativas)
 web/src/
   api.ts                  todas as chamadas HTTP e tipos; P = espelho das permissões do backend; evento de sessão expirada (401)

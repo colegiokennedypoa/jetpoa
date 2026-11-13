@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  api, brl,
+  api, brl, danfeParaImprimir,
   type Apoio, type ComandaItem, type ComandaResumo, type DescontoManual, type Pagamento, type PedidoFechamento, type Simulacao,
 } from '../api'
 import { useSessao } from '../sessao'
+import { imprimirPagina } from '../imprimir'
 import { erroCpfCnpj, mascaraCpfCnpj, soDigitos } from '../documento'
 
 type Props = {
@@ -83,8 +84,11 @@ export default function FecharConta({ comanda, itens, onFechada, onVoltar }: Pro
         : nf.situacao === 'AUTORIZADA' ? ` NFC-e ${nf.numero} autorizada.`
         : nf.situacao === 'CONTINGENCIA' ? ` NFC-e ${nf.numero} em contingência (será transmitida).`
         : ` NFC-e: ${nf.mensagem ?? nf.situacao}`
-      onFechada(`Comanda ${comanda.numero} fechada: ${brl(r.total)}${r.troco > 0 ? ` · TROCO ${brl(r.troco)}` : ''}.${nota}`
-        + (r.erroDanfe ? ` DANFE não impresso: ${r.erroDanfe}` : ''))
+      // DANFE: impressora padrão desta máquina
+      const danfe = danfeParaImprimir(nf)
+      let erroDanfe = ''
+      if (danfe) await imprimirPagina(`/api/fiscal/notas/${danfe}/danfe`).catch(e => { erroDanfe = ` DANFE não impresso: ${(e as Error).message}` })
+      onFechada(`Comanda ${comanda.numero} fechada: ${brl(r.total)}${r.troco > 0 ? ` · TROCO ${brl(r.troco)}` : ''}.${nota}${erroDanfe}`)
     } catch (e) {
       setErro((e as Error).message)
     } finally {

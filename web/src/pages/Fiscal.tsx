@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { api, brl, hora, P, type ComandaSemNota, type FiscalStatus, type Nota } from '../api'
+import { api, brl, danfeParaImprimir, hora, P, type ComandaSemNota, type FiscalStatus, type Nota } from '../api'
 import { useSessao } from '../sessao'
+import { imprimirPagina } from '../imprimir'
 
 const SIT: Record<string, string> = {
   AUTORIZADA: 'tag ok', CANCELADA: 'tag', SUBSTITUIDA: 'tag', INUTILIZADA: 'tag',
@@ -29,9 +30,12 @@ export default function Fiscal() {
   useEffect(() => { api.fiscalStatus().then(setStatus).catch(e => setMsg({ tipo: 'erro', texto: e.message })) }, [])
   useEffect(() => { carregar(); const t = setInterval(carregar, 15000); return () => clearInterval(t) }, [carregar])
 
-  const acao = async (f: () => Promise<{ situacao: string; mensagem: string | null }>, ok: string) => {
+  const acao = async (f: () => Promise<{ situacao: string; mensagem: string | null; id?: number | null; nova?: boolean }>, ok: string) => {
     try {
       const r = await f()
+      // emissão/reenvio autorizado: DANFE na impressora padrão desta máquina
+      const danfe = danfeParaImprimir({ chave: null, numero: null, id: null, ...r })
+      if (danfe) await imprimirPagina(`/api/fiscal/notas/${danfe}/danfe`).catch(() => {})
       setMsg({ tipo: ['AUTORIZADA', 'CONTINGENCIA', 'CANCELADA', 'INUTILIZADA'].includes(r.situacao) ? 'ok' : 'erro', texto: `${ok}: ${r.situacao}${r.mensagem ? ' · ' + r.mensagem : ''}` })
     } catch (e) { setMsg({ tipo: 'erro', texto: (e as Error).message }) }
     carregar()
@@ -121,7 +125,7 @@ export default function Fiscal() {
                 <a className="sec botao-link" href={`/api/fiscal/notas/${n.id}/danfe`} target="_blank" rel="noreferrer">DANFE</a>
                 <a className="sec botao-link" href={`/api/fiscal/notas/${n.id}/xml`}>XML</a>
                 {emitir && ['AUTORIZADA', 'CONTINGENCIA'].includes(n.situacao) &&
-                  <button className="sec" onClick={() => acao(async () => { await api.imprimirNota(n.id); return { situacao: 'IMPRESSO', mensagem: null } }, `NFC-e ${n.numero}`)}>Imprimir</button>}
+                  <button className="sec" onClick={() => imprimirPagina(`/api/fiscal/notas/${n.id}/danfe`).catch(e => setMsg({ tipo: 'erro', texto: (e as Error).message }))}>Imprimir</button>}
                 {n.situacao === 'REJEITADA' && <>
                   {emitir && <button className="sec" onClick={() => acao(() => api.reenviarNota(n.id), `NFC-e ${n.numero}`)}>Reenviar</button>}
                   {cancelar && <button className="sec" onClick={() => setInutilizando({ inicial: n.numero, final: n.numero })}>Inutilizar</button>}

@@ -98,7 +98,7 @@ export type Calculo = {
   consumoInterno: boolean; descontos: DescontoCalculado[]; erros: string[]
 }
 export type Simulacao = { calculo: Calculo; limiteOperadorPct: number | null; exigeAutorizacao: boolean }
-export type NfceResultado = { situacao: string; id: number | null; numero: number | null; chave: string | null; mensagem: string | null }
+export type NfceResultado = { situacao: string; id: number | null; numero: number | null; chave: string | null; mensagem: string | null; nova?: boolean }
 export type FiscalStatus = {
   configurada: boolean; ambiente: number; ambienteNome: string; serie: number
   certificado: { titular: string; validade: string; diasRestantes: number } | null
@@ -277,7 +277,7 @@ export const api = {
   fechar: (id: number, f: {
     pedido: PedidoFechamento; autorizadorId: number | null; autorizadorPin: string | null
     pagamentos: Pagamento[]; cpfCnpjNota: string | null
-  }) => req<{ id: number; total: number; troco: number; descontoTotal: number; nfce: NfceResultado | null; erroDanfe: string | null }>(
+  }) => req<{ id: number; total: number; troco: number; descontoTotal: number; nfce: NfceResultado | null }>(
     `/api/comandas/${id}/fechar`, { method: 'POST', body: JSON.stringify(f) }),
 
   eventos: () => req<Evento[]>('/api/eventos'),
@@ -318,7 +318,6 @@ export const api = {
   comandasSemNota: () => req<ComandaSemNota[]>('/api/fiscal/pendentes'),
   emitirNota: (comandaId: number) => req<NfceResultado>(`/api/fiscal/comandas/${comandaId}/emitir`, { method: 'POST' }),
   reenviarNota: (id: number) => req<NfceResultado>(`/api/fiscal/notas/${id}/reenviar`, { method: 'POST' }),
-  imprimirNota: (id: number) => req<{ ok: boolean }>(`/api/fiscal/notas/${id}/imprimir`, { method: 'POST' }),
   cancelarNota: (id: number, justificativa: string) =>
     req<NfceResultado>(`/api/fiscal/notas/${id}/cancelar`, { method: 'POST', body: JSON.stringify({ justificativa }) }),
   inutilizar: (i: { serie: number | null; inicial: number; final: number; justificativa: string }) =>
@@ -343,3 +342,7 @@ export const gravarLocal = (k: string, v: string) => { try { localStorage.setIte
 export const hora = (iso: string) => new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
 
 export const brl = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+
+/** DANFE de uma nota precisa ser impresso? (nota nova, autorizada ou em contingência) */
+export const danfeParaImprimir = (n: NfceResultado | null | undefined): number | null =>
+  n && n.id && n.nova !== false && (n.situacao === 'AUTORIZADA' || n.situacao === 'CONTINGENCIA') ? n.id : null

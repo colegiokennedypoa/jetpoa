@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { api, brl, hora, P, type Area, type Cliente, type ComandaItem, type ComandaResumo, type Usuario } from '../api'
 import { useSessao } from '../sessao'
+import { imprimirPagina } from '../imprimir'
 import Lancamento from '../components/Lancamento'
 import FecharConta from '../components/FecharConta'
 import BuscaCliente from '../components/BuscaCliente'
@@ -181,6 +182,7 @@ function DetalheComanda({ id, onMudou, onMsg, onEncerrada }: {
   const { eu, pode } = useSessao()
   const [dados, setDados] = useState<{ comanda: ComandaResumo; itens: ComandaItem[] }>()
   const [modo, setModo] = useState<'ver' | 'lancar' | 'fechar' | 'cancelar'>('ver')
+  const [imprimindo, setImprimindo] = useState(false)
   const lancando = modo === 'lancar'
   const setLancando = (f: (l: boolean) => boolean) => setModo(m => (f(m === 'lancar') ? 'lancar' : 'ver'))
 
@@ -193,6 +195,18 @@ function DetalheComanda({ id, onMudou, onMsg, onEncerrada }: {
 
   if (!dados) return <p className="vazio">Carregando…</p>
   const { comanda: c, itens } = dados
+
+  const imprimirConferencia = async () => {
+    setImprimindo(true)
+    try {
+      await imprimirPagina(`/api/comandas/${c.id}/conferencia`)
+      onMsg({ tipo: 'ok', texto: `Conferência da comanda ${c.numero} enviada para a impressora.` })
+    } catch (e) {
+      onMsg({ tipo: 'erro', texto: (e as Error).message })
+    } finally {
+      setImprimindo(false)
+    }
+  }
 
   const cancelar = async (item: ComandaItem) => {
     const motivo = window.prompt(`Cancelar ${item.quantidade}x ${item.produto}?\nInforme o motivo:`)
@@ -218,6 +232,8 @@ function DetalheComanda({ id, onMudou, onMsg, onEncerrada }: {
         {c.situacao === 'A' ? (
           <span className="acoes-cab">
             {pode(P.comandaLancar) && <button onClick={() => setLancando(l => !l)}>{lancando ? 'Fechar lançamento' : '+ Lançar itens'}</button>}
+            {pode(P.comandaFechar) && <button className="sec" onClick={imprimirConferencia} disabled={c.qtdItens === 0 || imprimindo}
+              title="Imprime a lista de itens e o total para o cliente conferir antes de pagar">{imprimindo ? 'Imprimindo…' : 'Imprimir conferência'}</button>}
             {pode(P.comandaFechar) && <button onClick={() => setModo('fechar')} disabled={c.qtdItens === 0 || c.clienteId == null}
               title={c.clienteId == null ? 'Vincule um cliente antes de fechar' : undefined}>Fechar conta</button>}
             {pode(P.comandaFechar) && <button className="sec" onClick={() => setModo('cancelar')}>Cancelar comanda</button>}

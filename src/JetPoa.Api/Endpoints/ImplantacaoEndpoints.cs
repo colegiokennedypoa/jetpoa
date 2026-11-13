@@ -206,7 +206,7 @@ public static class ImplantacaoEndpoints
 
             // impressoras
             var setores = await c.QueryAsync<(string Nome, string Imprime, string? Host, decimal? Porta)>(
-                "select nome, imprime, impressora_host, impressora_porta from setor_producao where ativo = 'S' and codigo <> 'NENHUM' order by id");
+                "select nome, imprime, impressora_host, impressora_porta from setor_producao where ativo = 'S' and codigo not in ('NENHUM', 'CAIXA') order by id");
             // testa todas as impressoras ao mesmo tempo (2 s de limite cada)
             var testes = setores.Select(async s => (s, ok: s.Imprime == "S" && !string.IsNullOrWhiteSpace(s.Host)
                                                         && await TcpAbertaAsync(s.Host!, (int)(s.Porta ?? 9100)))).ToList();
