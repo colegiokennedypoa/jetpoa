@@ -34,6 +34,8 @@ public static class ComandaEndpoints
         public DateTime? ClienteNascimento { get; set; }
         /// <summary>Última mesa informada num pedido (sugerida no próximo).</summary>
         public string? Mesa { get; set; }
+        /// <summary>Soma dos pagamentos prévios (abatidos no fechamento).</summary>
+        public decimal PagoPrevio { get; set; }
     }
 
     public sealed class ComandaItem
@@ -96,7 +98,8 @@ public static class ComandaEndpoints
                (select count(*) from comanda_item i where i.comanda_id = co.id and i.situacao = 'A') qtd_itens,
                (select count(*) from envio_producao e where e.comanda_id = co.id and e.situacao = 'E') envios_com_erro,
                cl.cpf cliente_cpf, co.valor_total, co.fechada_em, co.menor_idade, cl.data_nascimento cliente_nascimento,
-               co.mesa
+               co.mesa,
+               nvl((select sum(pg.valor) from comanda_pagamento pg where pg.comanda_id = co.id and pg.previo = 'S'), 0) pago_previo
           from comanda co
           left join cliente cl on cl.id = co.cliente_id
           left join cliente_categoria cc on cc.id = cl.categoria_id

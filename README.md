@@ -20,7 +20,7 @@ Substitui o sistema Forms 6i do bistrô. Análise e proposta: [docs/01-analise-e
 6. `db/04_fase3_fechamento.sql`: como BISTRO (fechamento, descontos, isenções, pagamentos)
 7. `db/05_fase4_nfce.sql`: como BISTRO (emitente, numeração, NFC-e, inutilização, impressora do caixa)
 8. `db/06_numeracao_por_ambiente.sql` e `db/07_fase5_checkin_estoque.sql`: como BISTRO
-9. `db/08_comanda_exige_cliente.sql`, `db/09_login_senha.sql`, `db/10_usuario_garcom.sql`, `db/11_comanda_menor_idade.sql` e `db/12_mesa_no_pedido.sql`: como BISTRO
+9. `db/08_comanda_exige_cliente.sql`, `db/09_login_senha.sql`, `db/10_usuario_garcom.sql`, `db/11_comanda_menor_idade.sql`, `db/12_mesa_no_pedido.sql` e `db/13_pagamento_previo.sql`: como BISTRO
 
 ## Check-in, estoque e relatórios (Fase 5)
 - **Check-in (portaria TERRA / RIO):** cada aparelho lembra a sua portaria.
@@ -76,6 +76,7 @@ As mesmas chaves também podem vir por variável de ambiente. Valor vazio no arq
   - a nota online fica **VERIFICAR**;
   - é emitida outra em **contingência offline** (tpEmis 9) com o próximo número, e o DANFE sai com o aviso;
   - a cada minuto, a rotina transmite as contingências e consulta as notas a verificar. Se a original foi autorizada, ela é cancelada (substituída); se não chegou na SEFAZ, o número é inutilizado.
+- **Pagamento prévio:** na comanda aberta, "Pagamento prévio" registra um valor já pago (sinal, pacote, PIX adiantado) com a forma real. Ao fechar, ele aparece abatido e o caixa cobra só a diferença; a NFC-e sai com todas as formas. Valor prévio maior que a conta bloqueia o fechamento (remova e registre o valor certo). Comanda com pagamento prévio não é encerrada no check-out nem cancelada sem antes remover o pagamento.
 - **Conferência:** na comanda aberta, "Imprimir conferência" imprime os itens agrupados, descontos da categoria, taxa de serviço e total para o cliente conferir antes de pagar (não é documento fiscal). Também sai na impressora padrão do computador.
 - **Tela Fiscal:** status do certificado (dias para vencer), status da SEFAZ, notas das últimas 48h, DANFE (HTML), XML, reimpressão, reenvio de rejeitada, cancelamento e inutilização. Cancelar e inutilizar só aparecem para Gerente/Administrador.
 - **Testes:** `dotnet test` (28 testes). Chave e QR Code conferem com NFC-e autorizada pela SEFAZ-RS. Para conferir o hash do QR Code com o CSC real: `$env:JETPOA_TEST_CSC = "<csc>"`.

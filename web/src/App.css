@@ -88,6 +88,7 @@ input.invalido { border-color: var(--err); outline-color: var(--err); }
 }
 .cabecalho-comanda h3 { margin: 0; }
 .cabecalho-comanda .total { font-size: 1.4rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.cabecalho-comanda .total .pago-previo { display: block; font-size: 0.8rem; font-weight: 600; color: var(--muted); }
 
 .segmentado { display: flex; }
 .segmentado button { background: var(--surface); color: var(--text); border-color: var(--border); border-radius: 0; flex: 1; }

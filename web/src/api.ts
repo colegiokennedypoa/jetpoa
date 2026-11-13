@@ -64,6 +64,8 @@ export type ComandaResumo = {
   menorIdade: 'S' | 'N'; clienteNascimento: string | null
   /** Última mesa informada num pedido (sugerida no próximo). */
   mesa: string | null
+  /** Soma dos pagamentos prévios (abatidos no fechamento). */
+  pagoPrevio: number
 }
 
 export type Usuario = {
@@ -161,6 +163,7 @@ export type ProdutoInput = {
 }
 export type ItemChecklist = { grupo: string; titulo: string; status: 'ok' | 'aviso' | 'erro' | 'manual' | 'info'; detalhe: string }
 
+export type PagamentoPrevio = { id: number; formaPagamentoId: number; forma: string; valor: number; autorizacao: string | null; observacao: string | null; criadoEm: string; registradoPor: string | null }
 export type Pagamento = { formaPagamentoId: number; valor: number; valorRecebido: number | null; autorizacao: string | null }
 
 export type ComandaItem = {
@@ -322,6 +325,10 @@ export const api = {
     req<NfceResultado>(`/api/fiscal/notas/${id}/cancelar`, { method: 'POST', body: JSON.stringify({ justificativa }) }),
   inutilizar: (i: { serie: number | null; inicial: number; final: number; justificativa: string }) =>
     req<NfceResultado>('/api/fiscal/inutilizar', { method: 'POST', body: JSON.stringify(i) }),
+  pagamentosPrevios: (id: number) => req<PagamentoPrevio[]>(`/api/comandas/${id}/pagamentos-previos`),
+  registrarPagamentoPrevio: (id: number, p: { formaPagamentoId: number; valor: number; autorizacao: string | null; observacao: string | null }) =>
+    req<void>(`/api/comandas/${id}/pagamentos-previos`, { method: 'POST', body: JSON.stringify(p) }),
+  removerPagamentoPrevio: (id: number, pid: number) => req<void>(`/api/comandas/${id}/pagamentos-previos/${pid}`, { method: 'DELETE' }),
   cancelarComanda: (id: number, motivo: string, autorizadorId: number | null, autorizadorPin: string | null) =>
     req<void>(`/api/comandas/${id}/cancelar`, { method: 'POST', body: JSON.stringify({ motivo, autorizadorId, autorizadorPin }) }),
 }

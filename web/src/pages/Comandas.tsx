@@ -4,6 +4,7 @@ import { useSessao } from '../sessao'
 import { imprimirPagina } from '../imprimir'
 import Lancamento from '../components/Lancamento'
 import FecharConta from '../components/FecharConta'
+import PagamentoPrevio from '../components/PagamentoPrevio'
 import BuscaCliente from '../components/BuscaCliente'
 import { AvisoMenor, IdadeCliente, SEM_IDADE } from '../components/Idade'
 
@@ -183,6 +184,7 @@ function DetalheComanda({ id, onMudou, onMsg, onEncerrada }: {
   const [dados, setDados] = useState<{ comanda: ComandaResumo; itens: ComandaItem[] }>()
   const [modo, setModo] = useState<'ver' | 'lancar' | 'fechar' | 'cancelar'>('ver')
   const [imprimindo, setImprimindo] = useState(false)
+  const [registrandoPrevio, setRegistrandoPrevio] = useState(false)
   const lancando = modo === 'lancar'
   const setLancando = (f: (l: boolean) => boolean) => setModo(m => (f(m === 'lancar') ? 'lancar' : 'ver'))
 
@@ -228,12 +230,16 @@ function DetalheComanda({ id, onMudou, onMsg, onEncerrada }: {
           <h3>{c.identificacao ?? '—'} {c.clienteCategoria && <span className="tag ok">{c.clienteCategoria}</span>}</h3>
           <small>{c.entradaTipo === 'R' ? 'Entrada pelo Rio' : 'Entrada por Terra'}{c.area ? ` · ${c.area}` : ''} · aberta às {hora(c.abertaEm)}</small>
         </div>
-        <span className="total">{brl(c.valorTotal ?? c.total)}</span>
+        <span className="total">{brl(c.valorTotal ?? c.total)}
+          {c.situacao === 'A' && c.pagoPrevio > 0 && <small className="pago-previo">pago antes {brl(c.pagoPrevio)}</small>}
+        </span>
         {c.situacao === 'A' ? (
           <span className="acoes-cab">
             {pode(P.comandaLancar) && <button onClick={() => setLancando(l => !l)}>{lancando ? 'Fechar lançamento' : '+ Lançar itens'}</button>}
             {pode(P.comandaFechar) && <button className="sec" onClick={imprimirConferencia} disabled={c.qtdItens === 0 || imprimindo}
               title="Imprime a lista de itens e o total para o cliente conferir antes de pagar">{imprimindo ? 'Imprimindo…' : 'Imprimir conferência'}</button>}
+            {pode(P.comandaFechar) && <button className="sec" onClick={() => setRegistrandoPrevio(r => !r)}
+              title="Cliente pagou antes (sinal, pacote, PIX adiantado): o valor é abatido no fechamento">Pagamento prévio</button>}
             {pode(P.comandaFechar) && <button onClick={() => setModo('fechar')} disabled={c.qtdItens === 0 || c.clienteId == null}
               title={c.clienteId == null ? 'Vincule um cliente antes de fechar' : undefined}>Fechar conta</button>}
             {pode(P.comandaFechar) && <button className="sec" onClick={() => setModo('cancelar')}>Cancelar comanda</button>}
@@ -241,6 +247,10 @@ function DetalheComanda({ id, onMudou, onMsg, onEncerrada }: {
         ) : <span className="tag ok">{c.situacao === 'F' ? 'Fechada' : 'Cancelada'}</span>}
       </div>
       <AvisoMenor comanda={c} />
+      {pode(P.comandaFechar) && (
+        <PagamentoPrevio comandaId={c.id} aberta={c.situacao === 'A'} registrando={registrandoPrevio && modo !== 'fechar'}
+          onFechar={() => setRegistrandoPrevio(false)} onMudou={() => { carregar(); onMudou() }} onMsg={onMsg} />
+      )}
 
       {c.clienteId == null && c.situacao !== 'C' && (
         <div className="cartao alerta-box">

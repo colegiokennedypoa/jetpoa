@@ -29,6 +29,20 @@ public static class FechamentoEndpoints
 
     public sealed record PagamentoInput(long FormaPagamentoId, decimal Valor, decimal? ValorRecebido, string? Autorizacao);
 
+    public sealed record PagamentoPrevioInput(long FormaPagamentoId, decimal Valor, string? Autorizacao, string? Observacao);
+
+    public sealed class PagamentoPrevio
+    {
+        public long Id { get; set; }
+        public long FormaPagamentoId { get; set; }
+        public string Forma { get; set; } = "";
+        public decimal Valor { get; set; }
+        public string? Autorizacao { get; set; }
+        public string? Observacao { get; set; }
+        public DateTime CriadoEm { get; set; }
+        public string? RegistradoPor { get; set; }
+    }
+
     public sealed record SimularInput(Pedido Pedido);
 
     /// <summary>O operador é o usuário logado; Autorizador/PIN só quando outra pessoa (gerente) libera algo acima do limite.</summary>
@@ -178,11 +192,17 @@ public static class FechamentoEndpoints
                     troco += p.ValorRecebido.Value - p.Valor;
                 }
             }
+            // pagamento prévio (já registrado na comanda) é abatido: cobra-se só a diferença
+            var previo = await c.ExecuteScalarAsync<decimal>(
+                "select nvl(sum(valor), 0) from comanda_pagamento where comanda_id = :id and previo = 'S'", new { id }, tx);
+            if (previo > r.Total)
+                return Erro($"Pagamento prévio ({previo:C}) maior que o total da conta ({r.Total:C}). Ajuste o pagamento prévio antes de fechar.");
+            var restante = r.Total - previo;
             var pago = pagamentos.Sum(p => p.Valor);
-            if (pago != r.Total)
-                return Erro(pago < r.Total
-                    ? $"Faltam {r.Total - pago:C} para fechar (total {r.Total:C})."
-                    : $"Pagamentos ({pago:C}) maiores que o total ({r.Total:C}). Use \"valor recebido\" no dinheiro para troco.");
+            if (pago != restante)
+                return Erro(pago < restante
+                    ? $"Faltam {restante - pago:C} para fechar (total {r.Total:C}{(previo > 0 ? $", pago antes {previo:C}" : "")})."
+                    : $"Pagamentos ({pago:C}) maiores que o valor a pagar ({restante:C}). Use \"valor recebido\" no dinheiro para troco.");
 
             // grava
             foreach (var (itemId, vdesc) in r.DescontoPorItem)
@@ -221,7 +241,7 @@ public static class FechamentoEndpoints
                 values (:op, 'COMANDA', :id, 'FECHAMENTO', :detalhe)
                 """, new { op = operador.Id, id = id.ToString(), detalhe = new Clob(JsonSerializer.Serialize(new
                 {
-                    r.Subtotal, r.DescontoTotal, r.DescontoConcedidoPct, r.TaxaServico, r.Total, troco,
+                    r.Subtotal, r.DescontoTotal, r.DescontoConcedidoPct, r.TaxaServico, r.Total, troco, previo,
                     autorizador = autorizadorId, descontos = r.Descontos.Select(d => new { d.Origem, d.Descricao, d.Valor, d.MotivoId, d.Observacao }),
                     pagamentos = pagamentos.Select(p => new { p.FormaPagamentoId, p.Valor })
                 })) }, tx);
@@ -245,6 +265,65 @@ public static class FechamentoEndpoints
             return Results.Ok(new { id, total = r.Total, troco, descontoTotal = r.DescontoTotal, nfce = nota });
         });
 
+        // Pagamento prévio: registrado com a comanda aberta, abatido no fechamento
+        gFechar.MapGet("/comandas/{id:long}/pagamentos-previos", async (Db db, long id, CancellationToken ct) =>
+        {
+            using var c = await db.OpenAsync(ct);
+            return await c.QueryAsync<PagamentoPrevio>("""
+                select p.id, p.forma_pagamento_id, f.nome forma, p.valor, p.autorizacao, p.observacao, p.criado_em, u.nome registrado_por
+                  from comanda_pagamento p
+                  join forma_pagamento f on f.id = p.forma_pagamento_id
+                  left join usuario u on u.id = p.registrado_por
+                 where p.comanda_id = :id and p.previo = 'S'
+                 order by p.id
+                """, new { id });
+        });
+
+        gFechar.MapPost("/comandas/{id:long}/pagamentos-previos", async (ClaimsPrincipal user, Db db, long id, PagamentoPrevioInput i, CancellationToken ct) =>
+        {
+            if (i.Valor <= 0 || i.Valor > 999999) return Erro("Informe o valor pago.");
+            var valor = Math.Round(i.Valor, 2);
+            var obs = string.IsNullOrWhiteSpace(i.Observacao) ? null : i.Observacao.Trim();
+            if (obs?.Length > 200) return Erro("Observação com no máximo 200 caracteres.");
+            var aut = string.IsNullOrWhiteSpace(i.Autorizacao) ? null : i.Autorizacao.Trim();
+            if (aut?.Length > 40) return Erro("NSU/autorização com no máximo 40 caracteres.");
+            using var c = await db.OpenAsync(ct);
+            using var tx = c.BeginTransaction();
+            var sit = await c.ExecuteScalarAsync<string?>("select situacao from comanda where id = :id for update", new { id }, tx);
+            if (sit is null) return Results.NotFound(new { erro = "Comanda não encontrada." });
+            if (sit != "A") return Erro("Comanda não está aberta.");
+            if (await c.ExecuteScalarAsync<int>("select count(*) from forma_pagamento where id = :f and ativo = 'S'", new { f = i.FormaPagamentoId }, tx) == 0)
+                return Erro("Forma de pagamento inválida.");
+            await c.ExecuteAsync("""
+                insert into comanda_pagamento (comanda_id, forma_pagamento_id, valor, autorizacao, previo, registrado_por, observacao)
+                values (:id, :forma, :valor, :aut, 'S', :usr, :obs)
+                """, new { id, forma = i.FormaPagamentoId, valor, aut, usr = user.Id(), obs }, tx);
+            await c.ExecuteAsync("""
+                insert into auditoria (usuario_id, entidade, entidade_id, acao, detalhe)
+                values (:usr, 'COMANDA', :eid, 'PAGAMENTO_PREVIO', :det)
+                """, new { usr = user.Id(), eid = id.ToString(), det = JsonSerializer.Serialize(new { i.FormaPagamentoId, valor, obs }) }, tx);
+            tx.Commit();
+            return Results.NoContent();
+        });
+
+        gFechar.MapDelete("/comandas/{id:long}/pagamentos-previos/{pid:long}", async (ClaimsPrincipal user, Db db, long id, long pid, CancellationToken ct) =>
+        {
+            using var c = await db.OpenAsync(ct);
+            using var tx = c.BeginTransaction();
+            var sit = await c.ExecuteScalarAsync<string?>("select situacao from comanda where id = :id for update", new { id }, tx);
+            if (sit != "A") return Erro("Comanda não está aberta: o pagamento prévio já foi usado no fechamento.");
+            var p = await c.QuerySingleOrDefaultAsync<(decimal FormaPagamentoId, decimal Valor)>(
+                "select forma_pagamento_id, valor from comanda_pagamento where id = :pid and comanda_id = :id and previo = 'S'", new { id, pid }, tx);
+            if (p == default) return Results.NotFound(new { erro = "Pagamento prévio não encontrado." });
+            await c.ExecuteAsync("delete from comanda_pagamento where id = :pid", new { pid }, tx);
+            await c.ExecuteAsync("""
+                insert into auditoria (usuario_id, entidade, entidade_id, acao, detalhe)
+                values (:usr, 'COMANDA', :eid, 'PAGAMENTO_PREVIO_REMOVIDO', :det)
+                """, new { usr = user.Id(), eid = id.ToString(), det = JsonSerializer.Serialize(new { pagamentoId = pid, forma = (long)p.FormaPagamentoId, p.Valor }) }, tx);
+            tx.Commit();
+            return Results.NoContent();
+        });
+
         // Cancela comanda inteira (ex.: aberta por engano). Com itens ativos exige quem autoriza desconto.
         gFechar.MapPost("/comandas/{id:long}/cancelar", async (ClaimsPrincipal user, Db db, long id, CancelarComandaInput i, CancellationToken ct) =>
         {
@@ -254,6 +333,8 @@ public static class FechamentoEndpoints
             var sit = await c.ExecuteScalarAsync<string?>("select situacao from comanda where id = :id for update", new { id }, tx);
             if (sit is null) return Results.NotFound();
             if (sit != "A") return Erro("Comanda não está aberta.");
+            if (await c.ExecuteScalarAsync<int>("select count(*) from comanda_pagamento where comanda_id = :id", new { id }, tx) > 0)
+                return Erro("Comanda tem pagamento prévio: remova (devolva ao cliente) antes de cancelar.");
             var ativos = await c.ExecuteScalarAsync<int>(
                 "select count(*) from comanda_item where comanda_id = :id and situacao = 'A'", new { id }, tx);
             long? autorizador = null;
@@ -316,7 +397,9 @@ public static class FechamentoEndpoints
               from comanda co left join cliente cl on cl.id = co.cliente_id where co.id = :id
             """, new { id });
         var calculo = Calcular(ctx.Itens, ctx.Categoria, new Pedido(false, null, null, null), ctx.TaxaPadrao);
-        return (new Impressao.Conferencia.Dados((int)cab.Numero, cab.Cliente, cab.Mesa, cab.AbertaEm, ctx.Itens, calculo, DateTime.Now), null);
+        var previo = await c.ExecuteScalarAsync<decimal>(
+            "select nvl(sum(valor), 0) from comanda_pagamento where comanda_id = :id and previo = 'S'", new { id });
+        return (new Impressao.Conferencia.Dados((int)cab.Numero, cab.Cliente, cab.Mesa, cab.AbertaEm, ctx.Itens, calculo, DateTime.Now, previo), null);
     }
 
     private static async Task<decimal> TaxaPadraoAsync(IDbConnection c, IDbTransaction? tx)

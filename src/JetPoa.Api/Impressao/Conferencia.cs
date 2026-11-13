@@ -15,7 +15,7 @@ public static class Conferencia
     private static readonly CultureInfo Br = CultureInfo.GetCultureInfo("pt-BR");
 
     public sealed record Dados(int Numero, string? Cliente, string? Mesa, DateTime AbertaEm,
-        IReadOnlyList<Fechamento.Item> Itens, Fechamento.Resultado Calculo, DateTime Agora);
+        IReadOnlyList<Fechamento.Item> Itens, Fechamento.Resultado Calculo, DateTime Agora, decimal PagoPrevio = 0);
 
     private sealed record Grupo(string Produto, decimal PrecoUnitario, decimal Qtd)
     {
@@ -31,13 +31,19 @@ public static class Conferencia
              .ToList();
 
     /// <summary>Linhas de totais (rótulo, valor), na ordem do ticket. A última é o total.</summary>
-    private static List<(string Rotulo, string Valor)> Totais(Fechamento.Resultado c)
+    private static List<(string Rotulo, string Valor)> Totais(Fechamento.Resultado c, decimal pagoPrevio)
     {
         string R(decimal v) => v.ToString("N2", Br);
         var l = new List<(string, string)> { ("Subtotal", R(c.Subtotal)) };
         l.AddRange(c.Descontos.Where(x => x.Valor > 0).Select(x => (x.Descricao, "-" + R(x.Valor))));
         if (c.TaxaServico > 0) l.Add(($"Taxa de serviço {c.TaxaServicoPct.ToString("0.##", Br)}%", R(c.TaxaServico)));
-        l.Add(("TOTAL R$", R(c.Total)));
+        if (pagoPrevio > 0)
+        {
+            l.Add(("Total da conta", R(c.Total)));
+            l.Add(("Pago antecipado", "-" + R(pagoPrevio)));
+            l.Add(("A PAGAR R$", R(Math.Max(0, c.Total - pagoPrevio))));
+        }
+        else l.Add(("TOTAL R$", R(c.Total)));
         return l;
     }
 
@@ -68,7 +74,7 @@ public static class Conferencia
         }
         if (d.Itens.Count == 0) sb.Append("<tr><td>Nenhum item lançado.</td></tr>");
         sb.Append("</table><hr><table>");
-        var totais = Totais(d.Calculo);
+        var totais = Totais(d.Calculo, d.PagoPrevio);
         for (var k = 0; k < totais.Count; k++)
             sb.Append($"<tr{(k == totais.Count - 1 ? " class=total" : "")}><td>{H(totais[k].Rotulo)}</td><td class=n>{H(totais[k].Valor)}</td></tr>");
         sb.Append("</table><hr><div class=c>Confira os itens e informe qualquer<br>divergência ao garçom ou ao caixa.</div>");

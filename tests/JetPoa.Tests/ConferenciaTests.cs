@@ -28,4 +28,17 @@ public class ConferenciaTests
         Assert.Contains("Taxa de serviço 10%", html);
         Assert.Contains(calc.Total.ToString("N2", System.Globalization.CultureInfo.GetCultureInfo("pt-BR")), html);
     }
+
+    [Fact]
+    public void Pagamento_previo_aparece_e_mostra_so_a_diferenca()
+    {
+        var itens = new List<Fechamento.Item> { new(1, 10, "Almoço", 1, null, 1, 100m, null) };
+        var calc = Fechamento.Calcular(itens, null, new Fechamento.Pedido(false, null, null, 0m), 0m);
+        var html = System.Net.WebUtility.HtmlDecode(
+            Conferencia.Html(new Conferencia.Dados(5, null, null, DateTime.Today, itens, calc, DateTime.Now, PagoPrevio: 60m)));
+        Assert.Contains("Pago antecipado", html);
+        Assert.Contains("-60,00", html);
+        Assert.Contains("A PAGAR R$", html);
+        Assert.Contains("40,00", html);
+    }
 }

@@ -43,8 +43,10 @@ export default function FecharConta({ comanda, itens, onFechada, onVoltar }: Pro
 
   const calc = sim?.calculo
   const total = calc?.total ?? 0
+  const previo = comanda.pagoPrevio ?? 0
+  const aPagar = r2(Math.max(0, total - previo))
   const pago = r2(pagamentos.reduce((s, p) => s + (p.valor || 0), 0))
-  const falta = r2(total - pago)
+  const falta = r2(aPagar - pago)
   const troco = r2(pagamentos.reduce((s, p) => s + (p.valorRecebido != null ? Math.max(0, p.valorRecebido - p.valor) : 0), 0))
   const taxasNaComanda = [...new Set(ativos.map(i => i.taxaTipo).filter((t): t is string => !!t))]
   const isentasAuto = new Set((calc?.descontos ?? []).filter(d => d.origem === 'CATEGORIA' && d.taxaTipo).map(d => d.taxaTipo))
@@ -64,9 +66,9 @@ export default function FecharConta({ comanda, itens, onFechada, onVoltar }: Pro
     setPagamentos(ps => [...ps, { formaPagamentoId: formaId, valor: r2(valor), valorRecebido: null, autorizacao: null }])
   const setPag = (k: number, p: Partial<Pagamento>) => setPagamentos(ps => ps.map((x, i) => (i === k ? { ...x, ...p } : x)))
   const dividir = (n: number, formaId: number) => {
-    const parte = Math.floor((total / n) * 100) / 100
+    const parte = Math.floor((aPagar / n) * 100) / 100
     setPagamentos(Array.from({ length: n }, (_, i) => ({
-      formaPagamentoId: formaId, valor: i === n - 1 ? r2(total - parte * (n - 1)) : parte, valorRecebido: null, autorizacao: null,
+      formaPagamentoId: formaId, valor: i === n - 1 ? r2(aPagar - parte * (n - 1)) : parte, valorRecebido: null, autorizacao: null,
     })))
   }
 
@@ -165,6 +167,10 @@ export default function FecharConta({ comanda, itens, onFechada, onVoltar }: Pro
               {calc.descontos.map((d, k) => <tr key={k} className="desc"><td>{d.descricao}</td><td className="num">− {brl(d.valor)}</td></tr>)}
               {calc.taxaServico > 0 && <tr><td>Taxa de serviço {calc.taxaServicoPct}%</td><td className="num">+ {brl(calc.taxaServico)}</td></tr>}
               <tr className="tot"><td>Total</td><td className="num">{brl(calc.total)}</td></tr>
+              {previo > 0 && <>
+                <tr className="desc"><td>Pago antecipado</td><td className="num">− {brl(previo)}</td></tr>
+                <tr className="tot"><td>A pagar agora</td><td className="num">{brl(aPagar)}</td></tr>
+              </>}
             </tbody>
           </table>
         )}
@@ -175,6 +181,9 @@ export default function FecharConta({ comanda, itens, onFechada, onVoltar }: Pro
           </p>
         )}
         {calc?.erros.map((e, k) => <p key={k} className="erro">{e}</p>)}
+        {calc && previo > calc.total && (
+          <p className="erro">Pagamento prévio ({brl(previo)}) maior que o total da conta. Ajuste o pagamento prévio antes de fechar.</p>
+        )}
 
         <h4>Pagamento</h4>
         <div className="formas">
@@ -196,7 +205,7 @@ export default function FecharConta({ comanda, itens, onFechada, onVoltar }: Pro
         })}
         <div className="dividir">
           Dividir em
-          {[2, 3, 4, 5].map(n => <button key={n} className="sec" disabled={!apoio || total <= 0}
+          {[2, 3, 4, 5].map(n => <button key={n} className="sec" disabled={!apoio || aPagar <= 0}
             onClick={() => dividir(n, pagamentos[0]?.formaPagamentoId ?? apoio!.formas[0].id)}>{n}</button>)}
         </div>
         <p className={falta === 0 ? 'ok' : 'erro'}>
@@ -220,8 +229,8 @@ export default function FecharConta({ comanda, itens, onFechada, onVoltar }: Pro
           </div>
         )}
         {erro && <p className="erro">{erro}</p>}
-        <button className="enviar" disabled={enviando || !calc || falta !== 0 || !!docErro || (!!sim?.exigeAutorizacao && (!autorizadorId || autorizadorPin.length < 4))} onClick={confirmar}>
-          {enviando ? 'Fechando…' : `Fechar conta · ${brl(total)}`}
+        <button className="enviar" disabled={enviando || !calc || falta !== 0 || previo > total || !!docErro || (!!sim?.exigeAutorizacao && (!autorizadorId || autorizadorPin.length < 4))} onClick={confirmar}>
+          {enviando ? 'Fechando…' : `Fechar conta · ${brl(previo > 0 ? aPagar : total)}${previo > 0 ? ' a pagar' : ''}`}
         </button>
         <button className="sec" onClick={onVoltar}>Voltar</button>
       </div>

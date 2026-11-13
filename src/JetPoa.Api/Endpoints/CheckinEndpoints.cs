@@ -171,6 +171,7 @@ public static class CheckinEndpoints
                                motivo_cancelamento = 'Saída sem consumo', saida_em = sysdate
                          where id = :id and situacao = 'A'
                            and not exists (select 1 from comanda_item i where i.comanda_id = comanda.id and i.situacao = 'A')
+                           and not exists (select 1 from comanda_pagamento pg where pg.comanda_id = comanda.id)
                         """, new { id = com.Id, usr = user.Id() }, tx);
                     if (encerrou == 1)
                     {
@@ -185,7 +186,9 @@ public static class CheckinEndpoints
                 }
                 var total = await c.ExecuteScalarAsync<decimal>(
                     "select nvl(sum(quantidade * preco_unitario), 0) from comanda_item where comanda_id = :id and situacao = 'A'", new { id = com.Id });
-                return Results.UnprocessableEntity(new { erro = $"Comanda {i.Numero} ({com.Nome}) ainda está ABERTA com {total:C}. Encaminhar ao caixa." });
+                return Results.UnprocessableEntity(new { erro = total > 0
+                    ? $"Comanda {i.Numero} ({com.Nome}) ainda está ABERTA com {total:C}. Encaminhar ao caixa."
+                    : $"Comanda {i.Numero} ({com.Nome}) tem pagamento prévio. Encaminhar ao caixa." });
             }
             await c.ExecuteAsync("update comanda set saida_em = sysdate where id = :id", new { id = com.Id });
             return Results.Ok(new { numero = i.Numero, cliente = com.Nome, situacao = com.Situacao, total = com.Total });
