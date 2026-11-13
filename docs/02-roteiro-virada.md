@@ -8,7 +8,7 @@ A tela **Implantação** mostra o checklist ao vivo. Este roteiro diz **quando**
 | Item | Situação |
 |---|---|
 | Forms | Último fechamento de comanda e última NFC-e em **28/10/2026**. O job de NFC-e (401) está parado desde então. |
-| Rede | Servidor temporariamente em `192.168.0.109`. Impressoras (`.101.50/.55/.60`) e Tomcat AIOWS (`.101.76`) na rede `192.168.101.x` **não respondem**. |
+| Rede | Em 13/11 o servidor volta para a rede do bistrô `192.168.101.x`, com o Oracle em `192.168.101.12`. Impressoras: `.101.50/.55/.60`. |
 | Certificado A1 | **Vence em 21/11/2026.** Renovar antes da virada. |
 | NFC-e no sistema novo | Validada na SEFAZ-RS de **homologação**: autorização, cancelamento e inutilização. |
 | Série | **Série 1.** Em produção continua do nº **1213**, depois do último número do Forms. |
@@ -81,6 +81,6 @@ Se algo impedir a operação no D0:
 | Backup diário (04:00) | `C:\Projeto\JetPOA\backup` e `s3://jetpoa/jetpoa-bistro/`; restauração em [`docs\04-backup.md`](04-backup.md) |
 | Configuração e segredos | `C:\Projeto\certificado\52822987000123.conf` (fora do Git) |
 | Certificado A1 | `C:\Projeto\certificado\52822987000123.pfx` |
-| Banco | Oracle XE `192.168.0.109:1521/XE`, esquema `BISTRO` (o Forms continua no `ADMINISTRATIVO`) |
+| Banco | Oracle XE `192.168.101.12:1521/XE` (máquina virtual `kennedy` deste servidor), esquema `BISTRO` (o Forms continua no `ADMINISTRATIVO`) |
 | Scripts do banco | `db\00` a `db\13` (ordem no README) |
 | Guia do desenvolvedor | [`docs\03-guia-desenvolvedor.md`](03-guia-desenvolvedor.md) |

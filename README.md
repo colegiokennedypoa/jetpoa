@@ -53,7 +53,7 @@ Emissão direta com a SEFAZ-RS (modelo 65, layout 4.00), **sem o Tomcat/AIOWS**:
 
 **Configuração:** fica no arquivo local `C:\Projeto\certificado\52822987000123.conf`, ao lado do certificado e **fora do Git**. A API lê esse arquivo na inicialização (caminho em `appsettings.json` → `ArquivoConfiguracao`). Formato `Chave=Valor`, onde `__` separa os níveis:
 ```ini
-ConnectionStrings__Bistro=User Id=bistro;Password=...;Data Source=192.168.0.109:1521/XE;
+ConnectionStrings__Bistro=User Id=bistro;Password=...;Data Source=192.168.101.12:1521/XE;
 Nfce__Ambiente=2                 # 2 = homologação (testes) · 1 = produção
 Nfce__Serie=2
 Nfce__CertificadoArquivo=C:\Projeto\certificado\52822987000123.pfx

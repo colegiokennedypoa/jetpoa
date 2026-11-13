@@ -47,13 +47,13 @@ Sistema do bistrô do JetPOA. O complexo náutico de Porto Alegre tem duas entra
 | Programa instalado | `C:\Projeto\JetPOA\app` (versão anterior em `app.anterior`) |
 | Configuração e segredos | `C:\Projeto\certificado\52822987000123.conf` |
 | Certificado A1 | `C:\Projeto\certificado\52822987000123.pfx`, **vence em 21/11/2026** |
-| Oracle | `192.168.0.109:1521/XE`, usuário `bistro` (IP temporário; o TNS antigo aponta `192.168.101.12`) |
+| Oracle | `192.168.101.12:1521/XE`, usuário `bistro`. Roda na máquina virtual `C:\Projeto\kennedy\ead.vmx` (rede em ponte) do próprio servidor. Até 13/11/2026 ficou temporariamente em `192.168.0.109`. |
 | npm / git | **Não estão no PATH**: `"C:\Program Files\nodejs\npm.cmd"` e `"C:\Program Files\Git\cmd\git.exe"` |
 | PowerShell | 5.1, com **execução de scripts bloqueada por política**. Rode os comandos dos `.ps1` direto no console ou peça ao administrador. Serviço e firewall exigem PowerShell **como Administrador** |
 
 Formato do `.conf` (`Chave=Valor`, onde `__` separa níveis; variáveis de ambiente sobrescrevem; valor vazio não sobrescreve):
 ```ini
-ConnectionStrings__Bistro=User Id=bistro;Password=...;Data Source=192.168.0.109:1521/XE;
+ConnectionStrings__Bistro=User Id=bistro;Password=...;Data Source=192.168.101.12:1521/XE;
 Nfce__Ambiente=2          # 2 = homologação · 1 = produção
 Nfce__Serie=1
 Nfce__CertificadoArquivo=C:\Projeto\certificado\52822987000123.pfx
@@ -169,7 +169,7 @@ Todos os scripts até o `10` **já foram aplicados** no banco de produção. As 
 **Operacional, cabe ao responsável do bistrô e à TI:**
 - [ ] Trocar a versão instalada pela publicada em `C:\Projeto\JetPOA\app.nova` (seção 4). Depois, os usuários `admin` e `eduarda` entram com o **PIN atual como senha** e trocam no primeiro acesso.
 - [ ] **Renovar o certificado A1** (vence em 21/11/2026) e atualizar o `.conf`.
-- [ ] Restabelecer a rede `192.168.101.x`: impressoras de produção e servidor no IP definitivo. Depois, ajustar a conexão no `.conf`.
+- [x] Rede `192.168.101.x` (13/11/2026): Oracle em `192.168.101.12`, conexão ajustada no `.conf`. Falta conferir as impressoras de produção.
 - [ ] Contador: completar NCM, CFOP, CSOSN e CST dos produtos pendentes (77 em 11/11). Validar também o tratamento fiscal de serviços e taxas fora da nota e o rateio de pagamentos.
 - [ ] Virada D0 conforme [02-roteiro-virada.md](02-roteiro-virada.md): parar o Forms e o job 401, CSC de produção e `Nfce__Ambiente=1`.
 - [ ] Depois da virada: inutilizar os 583 números da série 1 que o Forms deixou sem autorização (tela Fiscal).
