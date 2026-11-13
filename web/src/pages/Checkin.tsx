@@ -33,7 +33,7 @@ export default function Checkin() {
         </span>
         <span className="segmentado mini">
           <button className={modo === 'entrada' ? 'ativo' : ''} onClick={() => setModo('entrada')}>Entrada</button>
-          <button className={modo === 'saida' ? 'ativo' : ''} onClick={() => setModo('saida')}>Saída</button>
+          {pode(P.checkout) && <button className={modo === 'saida' ? 'ativo' : ''} onClick={() => setModo('saida')}>Saída</button>}
           {pode(P.eventoEditar) && <button className={modo === 'eventos' ? 'ativo' : ''} onClick={() => setModo('eventos')}>Eventos</button>}
           {pode(P.eventoEditar) && <button className={modo === 'areas' ? 'ativo' : ''} onClick={() => setModo('areas')}>Áreas</button>}
         </span>
@@ -48,7 +48,7 @@ export default function Checkin() {
       {msg && <p className={msg.tipo}>{msg.texto}</p>}
 
       {modo === 'entrada' && <Entrada entrada={entrada} onMsg={m => { setMsg(m); atualizar() }} />}
-      {modo === 'saida' && <Saida onMsg={m => { setMsg(m); atualizar() }} />}
+      {modo === 'saida' && pode(P.checkout) && <Saida onMsg={m => { setMsg(m); atualizar() }} />}
       {modo === 'eventos' && <Eventos onMudou={atualizar} onMsg={setMsg} />}
       {modo === 'areas' && <Areas onMsg={setMsg} />}
     </section>

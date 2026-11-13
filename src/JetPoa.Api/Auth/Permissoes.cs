@@ -15,6 +15,7 @@ public static class Permissoes
     public const string ComandaCancelar = "comanda.cancelar";      // cancelar comanda inteira com itens
     public const string ItemCancelar = "item.cancelar";
     public const string Checkin = "checkin";
+    public const string Checkout = "checkout";                      // registrar saída na portaria (garçom não)
     public const string EventoEditar = "evento.editar";
     public const string ClientesVer = "clientes.ver";
     public const string ClientesEditar = "clientes.editar";        // cadastrar cliente novo (check-in)
@@ -35,7 +36,7 @@ public static class Permissoes
 
     public static readonly string[] Todas =
     [
-        ComandaVer, ComandaAbrir, ComandaLancar, ComandaFechar, ComandaCancelar, ItemCancelar, Checkin, EventoEditar,
+        ComandaVer, ComandaAbrir, ComandaLancar, ComandaFechar, ComandaCancelar, ItemCancelar, Checkin, Checkout, EventoEditar,
         ClientesVer, ClientesEditar, ClientesCadastro, ProdutosVer, ProdutosEditar, ProducaoVer, ProducaoConfigurar,
         FiscalVer, FiscalEmitir, FiscalCancelar, EstoqueVer, EstoqueMovimentar, EstoqueAjustar, Relatorios,
         UsuariosGerenciar, Implantacao,
@@ -48,16 +49,18 @@ public static class Permissoes
         "Gerente" => Todas.Where(p => p is not (UsuariosGerenciar or Implantacao)).ToArray(),
         "Caixa" =>
         [
-            ComandaVer, ComandaAbrir, ComandaLancar, ComandaFechar, ItemCancelar, Checkin,
+            ComandaVer, ComandaAbrir, ComandaLancar, ComandaFechar, ItemCancelar, Checkin, Checkout,
             ClientesVer, ClientesEditar, ClientesCadastro, ProdutosVer, ProducaoVer, FiscalVer, FiscalEmitir, EstoqueVer,
         ],
-        // Garçom também abre comanda pela portaria (check-in), como o perfil Check-in
+        // Garçom também abre comanda pela portaria (check-in), mas não registra saída (check-out)
         "Garçom" => [ComandaVer, ComandaLancar, ProdutosVer, Checkin, ClientesVer, ClientesEditar],
-        "Check-in" => [Checkin, ClientesVer, ClientesEditar],
+        "Check-in" => [Checkin, Checkout, ClientesVer, ClientesEditar],
         _ => [],
     };
 
     public static long Id(this ClaimsPrincipal u) => long.Parse(u.FindFirstValue(ClaimTypes.NameIdentifier)!);
     public static string Nome(this ClaimsPrincipal u) => u.FindFirstValue(ClaimTypes.Name) ?? "";
-    public static bool Pode(this ClaimsPrincipal u, string permissao) => u.HasClaim("perm", permissao);
+    /// <summary>Confere pelo perfil (não pelas claims gravadas no login): mudança de permissão vale já para quem está logado.</summary>
+    public static bool Pode(this ClaimsPrincipal u, string permissao) =>
+        u.FindFirstValue("perfil") is { } perfil && DoPerfil(perfil).Contains(permissao);
 }

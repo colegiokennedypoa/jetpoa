@@ -4,6 +4,7 @@ using System.Data;
 using Dapper;
 using JetPoa.Api.Data;
 using JetPoa.Api.Domain;
+using Microsoft.AspNetCore.Authorization;
 using Oracle.ManagedDataAccess.Client;
 
 namespace JetPoa.Api.Endpoints;
@@ -149,7 +150,7 @@ public static class CheckinEndpoints
 
         // Check-out: registra a saída. Comanda aberta SEM nenhum item é encerrada aqui mesmo (não precisa ir ao caixa);
         // com consumo (ou taxas do evento) continua bloqueada e é encaminhada ao caixa.
-        g.MapPost("/checkout", async (ClaimsPrincipal user, Db db, CheckoutInput i, CancellationToken ct) =>
+        g.MapPost("/checkout", [Authorize(Permissoes.Checkout)] async (ClaimsPrincipal user, Db db, CheckoutInput i, CancellationToken ct) =>
         {
             using var c = await db.OpenAsync(ct);
             var com = await c.QueryFirstOrDefaultAsync<(decimal Id, string Situacao, decimal? Total, string? Nome)>("""

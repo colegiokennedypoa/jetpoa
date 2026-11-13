@@ -53,7 +53,7 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
     });
 builder.Services.AddAuthorization(o =>
 {
-    foreach (var p in Permissoes.Todas) o.AddPolicy(p, pol => pol.RequireClaim("perm", p));
+    foreach (var p in Permissoes.Todas) o.AddPolicy(p, pol => pol.RequireAuthenticatedUser().RequireAssertion(ctx => ctx.User.Pode(p)));
     // toda rota exige login, salvo as marcadas com AllowAnonymous
     o.FallbackPolicy = new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build();
 });

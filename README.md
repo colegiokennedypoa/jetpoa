@@ -91,7 +91,7 @@ As mesmas chaves também podem vir por variável de ambiente. Valor vazio no arq
   | Administrador | tudo, inclusive Usuários e Implantação |
   | Gerente | tudo menos Usuários e Implantação: relatórios, produtos, impressoras, eventos, estoque (entrada, perda, ajuste, inventário), cancelar comanda com itens, cancelar/inutilizar NFC-e |
   | Caixa | check-in, comandas (abrir, lançar, fechar, cancelar item), clientes, ver produção/fila, emitir NFC-e, ver estoque |
-  | Garçom | ver comandas e lançar itens; abrir comanda pela portaria (check-in/check-out), como o Check-in |
+  | Garçom | ver comandas e lançar itens; abrir comanda pela portaria (só entrada: o botão Saída/check-out não aparece) |
   | Check-in | portaria (check-in/check-out) |
 
   Garçom e Check-in **não veem a tela Clientes**. No check-in eles só buscam o cliente (mínimo de 3 letras ou dígitos) e cadastram cliente novo. A lista completa e a edição de clientes existentes ficam com Caixa, Gerente e Administrador (permissão `clientes.cadastro`).
