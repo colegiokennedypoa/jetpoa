@@ -20,6 +20,7 @@ public static class Permissoes
     public const string ClientesVer = "clientes.ver";
     public const string ClientesEditar = "clientes.editar";        // cadastrar cliente novo (check-in)
     public const string ClientesCadastro = "clientes.cadastro";    // tela Clientes: lista completa e edição de existentes
+    public const string ClientesCategorias = "clientes.categorias"; // regras das categorias (isenções, desconto, limite)
     public const string ProdutosVer = "produtos.ver";
     public const string ProdutosEditar = "produtos.editar";
     public const string ProducaoVer = "producao.ver";               // fila, reimprimir, tentar de novo
@@ -37,7 +38,7 @@ public static class Permissoes
     public static readonly string[] Todas =
     [
         ComandaVer, ComandaAbrir, ComandaLancar, ComandaFechar, ComandaCancelar, ItemCancelar, Checkin, Checkout, EventoEditar,
-        ClientesVer, ClientesEditar, ClientesCadastro, ProdutosVer, ProdutosEditar, ProducaoVer, ProducaoConfigurar,
+        ClientesVer, ClientesEditar, ClientesCadastro, ClientesCategorias, ProdutosVer, ProdutosEditar, ProducaoVer, ProducaoConfigurar,
         FiscalVer, FiscalEmitir, FiscalCancelar, EstoqueVer, EstoqueMovimentar, EstoqueAjustar, Relatorios,
         UsuariosGerenciar, Implantacao,
     ];

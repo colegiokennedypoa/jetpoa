@@ -3,6 +3,7 @@ using JetPoa.Api.Auth;
 using Dapper;
 using JetPoa.Api.Data;
 using JetPoa.Api.Domain;
+using System.Text.Json;
 using Oracle.ManagedDataAccess.Client;
 
 namespace JetPoa.Api.Endpoints;
@@ -35,10 +36,19 @@ public static class ClienteEndpoints
         public string Nome { get; set; } = "";
         public decimal DescontoPctPadrao { get; set; }
         public string IsentaEstacionamento { get; set; } = "N";
+        public string IsentaEmbarque { get; set; } = "N";
         public string IsentaCouvert { get; set; } = "N";
         public string IsentaTaxaServico { get; set; } = "N";
         public decimal? LimiteComanda { get; set; }
+        public string Ativo { get; set; } = "S";
+        public int Clientes { get; set; }
     }
+
+    public sealed record CategoriaInput(string Nome, decimal DescontoPctPadrao, bool IsentaEstacionamento, bool IsentaEmbarque,
+        bool IsentaCouvert, bool IsentaTaxaServico, decimal? LimiteComanda, bool Ativo = true);
+
+    /// <summary>Categoria usada por nome no cadastro automático (check-in, importação): não renomeia nem inativa.</summary>
+    private const string CategoriaPadrao = "Normal";
 
     private const string SelectCliente = """
         select c.id, c.cpf, c.nome, c.celular, c.email, c.data_nascimento, c.sexo,
@@ -52,15 +62,21 @@ public static class ClienteEndpoints
         var g = app.MapGroup("/api").WithTags("Clientes").RequireAuthorization(Permissoes.ClientesVer);
         var gEditar = g.MapGroup("").RequireAuthorization(Permissoes.ClientesEditar);
 
-        g.MapGet("/cliente-categorias", async (Db db, CancellationToken ct) =>
+        // ativas (cadastro de cliente); todas=true traz também as inativas e a contagem de clientes (tela Categorias)
+        g.MapGet("/cliente-categorias", async (Db db, bool? todas, CancellationToken ct) =>
         {
             using var c = await db.OpenAsync(ct);
             return await c.QueryAsync<ClienteCategoria>("""
-                select id, nome, desconto_pct_padrao, isenta_estacionamento, isenta_couvert,
-                       isenta_taxa_servico, limite_comanda
-                  from cliente_categoria where ativo = 'S' order by id
-                """);
+                select k.id, k.nome, k.desconto_pct_padrao, k.isenta_estacionamento, k.isenta_embarque, k.isenta_couvert,
+                       k.isenta_taxa_servico, k.limite_comanda, k.ativo,
+                       case when :todas = 1 then (select count(*) from cliente x where x.categoria_id = k.id) else 0 end clientes
+                  from cliente_categoria k where (:todas = 1 or k.ativo = 'S') order by k.ativo desc, k.id
+                """, new { todas = todas == true ? 1 : 0 });
         });
+
+        var gCat = app.MapGroup("/api/cliente-categorias").WithTags("Clientes").RequireAuthorization(Permissoes.ClientesCategorias);
+        gCat.MapPost("", (ClaimsPrincipal user, Db db, CategoriaInput i, CancellationToken ct) => SalvarCategoriaAsync(user, db, null, i, ct));
+        gCat.MapPut("/{id:long}", (ClaimsPrincipal user, Db db, long id, CategoriaInput i, CancellationToken ct) => SalvarCategoriaAsync(user, db, id, i, ct));
 
         // Busca por nome, CPF ou celular (paginada, 50 por página).
         // Sem acesso à tela Clientes (garçom, check-in): só busca com 3+ caracteres e 1ª página — nada de listar o cadastro.
@@ -169,6 +185,76 @@ public static class ClienteEndpoints
             SelectCliente + " where c.cpf = :cpf and (:idAtual is null or c.id <> :idAtual)", new { cpf, idAtual });
         return dono is null ? null
             : Results.Conflict(new { erro = $"CPF já cadastrado para {dono.Nome} (cliente nº {dono.Id}).", clienteId = dono.Id });
+    }
+
+    private static async Task<IResult> SalvarCategoriaAsync(ClaimsPrincipal user, Db db, long? id, CategoriaInput i, CancellationToken ct)
+    {
+        static IResult Erro(string m) => Results.UnprocessableEntity(new { erro = m });
+        var nome = i.Nome?.Trim();
+        if (string.IsNullOrEmpty(nome) || nome.Length > 60) return Erro("Informe o nome da categoria (até 60 caracteres).");
+        if (i.DescontoPctPadrao is < 0 or > 100) return Erro("Desconto padrão deve estar entre 0 e 100%.");
+        if (i.LimiteComanda is <= 0 or > 9999999) return Erro("Limite da comanda deve ser maior que zero (vazio = limite geral).");
+        var depois = new
+        {
+            nome,
+            desc = Math.Round(i.DescontoPctPadrao, 2),
+            est = i.IsentaEstacionamento ? "S" : "N",
+            emb = i.IsentaEmbarque ? "S" : "N",
+            cou = i.IsentaCouvert ? "S" : "N",
+            ser = i.IsentaTaxaServico ? "S" : "N",
+            lim = i.LimiteComanda is { } l ? Math.Round(l, 2) : (decimal?)null,
+            ativo = i.Ativo ? "S" : "N",
+        };
+
+        using var c = await db.OpenAsync(ct);
+        using var tx = c.BeginTransaction();
+        ClienteCategoria? antes = null;
+        if (id is not null)
+        {
+            antes = await c.QuerySingleOrDefaultAsync<ClienteCategoria>("""
+                select id, nome, desconto_pct_padrao, isenta_estacionamento, isenta_embarque, isenta_couvert,
+                       isenta_taxa_servico, limite_comanda, ativo
+                  from cliente_categoria where id = :id for update
+                """, new { id }, tx);
+            if (antes is null) return Results.NotFound(new { erro = "Categoria não encontrada." });
+            if (antes.Nome == CategoriaPadrao && (nome != CategoriaPadrao || !i.Ativo))
+                return Erro($"A categoria {CategoriaPadrao} é a padrão dos clientes novos: não pode ser renomeada nem inativada.");
+            if (antes.Ativo == "S" && !i.Ativo)
+            {
+                var qtd = await c.ExecuteScalarAsync<int>("select count(*) from cliente where categoria_id = :id", new { id }, tx);
+                if (qtd > 0) return Erro($"{qtd} cliente(s) estão nesta categoria: mude a categoria deles antes de inativar.");
+            }
+        }
+        try
+        {
+            if (id is null)
+            {
+                await c.ExecuteAsync("""
+                    insert into cliente_categoria (nome, desconto_pct_padrao, isenta_estacionamento, isenta_embarque, isenta_couvert,
+                                                   isenta_taxa_servico, limite_comanda, ativo)
+                    values (:nome, :desc, :est, :emb, :cou, :ser, :lim, :ativo)
+                    """, depois, tx);
+                id = await c.ExecuteScalarAsync<long>("select id from cliente_categoria where nome = :nome", new { nome }, tx);
+            }
+            else
+                await c.ExecuteAsync("""
+                    update cliente_categoria set nome = :nome, desconto_pct_padrao = :desc, isenta_estacionamento = :est,
+                           isenta_embarque = :emb, isenta_couvert = :cou, isenta_taxa_servico = :ser, limite_comanda = :lim, ativo = :ativo
+                     where id = :id
+                    """, new { id, depois.nome, depois.desc, depois.est, depois.emb, depois.cou, depois.ser, depois.lim, depois.ativo }, tx);
+        }
+        catch (OracleException e) when (e.Number == 1)
+        {
+            return Results.Conflict(new { erro = $"Já existe uma categoria chamada {nome}." });
+        }
+        // muda descontos e isenções automáticas do fechamento: fica registrado quem mudou e o que era antes
+        await c.ExecuteAsync("""
+            insert into auditoria (usuario_id, entidade, entidade_id, acao, detalhe)
+            values (:usr, 'CLIENTE_CATEGORIA', :eid, :acao, :det)
+            """, new { usr = user.Id(), eid = id.ToString(), acao = antes is null ? "INCLUIR" : "ALTERAR",
+                       det = JsonSerializer.Serialize(new { antes, depois }) }, tx);
+        tx.Commit();
+        return Results.NoContent();
     }
 
     private static object Parametros(long id, ClienteInput i, string? cpf, string? celular, long categoriaId) => new

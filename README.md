@@ -112,6 +112,7 @@ As mesmas chaves também podem vir por variável de ambiente. Valor vazio no arq
 - **Fechar conta:** vale o limite de desconto de quem está logado. Se o desconto passar do limite, ou se for consumo interno, a tela pede o gerente e o PIN dele.
 - **Descontos:** em % ou R$, no total ou num item, sempre com motivo (cadastro `motivo_desconto`; "Outro", "Reclamação" e "Parceria" exigem observação).
 - **Isenções automáticas pela categoria do cliente:** estacionamento (terra), embarque (rio) e couvert, conforme `cliente_categoria`. Não contam na alçada. A isenção manual conta.
+- **Categorias de cliente** (Clientes → Categorias, só Gerente/Administrador, permissão `clientes.categorias`): isenções, desconto padrão sobre o consumo, isenção da taxa de serviço e limite da comanda. Cada mudança vai para a auditoria. "Normal" é a categoria dos clientes novos: muda as regras, não o nome. Só inativa categoria sem clientes.
 - **Taxa de serviço:** % padrão no parâmetro `TAXA_SERVICO_PCT` (hoje 0), editável no fechamento. Incide só sobre consumo, nunca sobre as taxas.
 - **Pagamento dividido** entre várias formas, "dividir em N" e troco somente no dinheiro. Cada forma tem o código `tPag` para a NFC-e.
 - **Desconto rateado por item** em `comanda_item.valor_desconto` (base do `vDesc` da NFC-e). Tudo fica registrado em `comanda_desconto`, `comanda_pagamento` e `auditoria`.

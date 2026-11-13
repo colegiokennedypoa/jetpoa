@@ -18,7 +18,16 @@ export type ProdutoResumo = {
   fiscalOk: 'S' | 'N' | 'X'
 }
 
-export type ClienteCategoria = { id: number; nome: string }
+export type ClienteCategoria = {
+  id: number; nome: string; descontoPctPadrao: number; isentaEstacionamento: 'S' | 'N'; isentaEmbarque: 'S' | 'N'
+  isentaCouvert: 'S' | 'N'; isentaTaxaServico: 'S' | 'N'; limiteComanda: number | null; ativo: 'S' | 'N'
+  /** só vem preenchido na listagem completa (todas=true) */
+  clientes: number
+}
+export type ClienteCategoriaInput = {
+  nome: string; descontoPctPadrao: number; isentaEstacionamento: boolean; isentaEmbarque: boolean
+  isentaCouvert: boolean; isentaTaxaServico: boolean; limiteComanda: number | null; ativo: boolean
+}
 
 export type Cliente = {
   id: number
@@ -223,7 +232,9 @@ export const api = {
   categorias: () => req<Categoria[]>('/api/categorias'),
   produtos: (p: { busca?: string; categoriaId?: number; pendenciaFiscal?: boolean; somenteAtivos?: boolean }) =>
     req<ProdutoResumo[]>(`/api/produtos?${qs(p)}`),
-  clienteCategorias: () => req<ClienteCategoria[]>('/api/cliente-categorias'),
+  clienteCategorias: (todas = false) => req<ClienteCategoria[]>(`/api/cliente-categorias${todas ? '?todas=true' : ''}`),
+  salvarClienteCategoria: (id: number | null, k: ClienteCategoriaInput) =>
+    req<void>(id ? `/api/cliente-categorias/${id}` : '/api/cliente-categorias', { method: id ? 'PUT' : 'POST', body: JSON.stringify(k) }),
   clientes: (busca: string) => req<Cliente[]>(`/api/clientes?${qs({ busca })}`),
   cliente: (id: number) => req<Cliente>(`/api/clientes/${id}`),
   /** Cliente que já usa o CPF, ou null se o CPF está livre. */
@@ -337,7 +348,7 @@ export const api = {
 export const P = {
   comandaVer: 'comanda.ver', comandaAbrir: 'comanda.abrir', comandaLancar: 'comanda.lancar', comandaFechar: 'comanda.fechar',
   comandaCancelar: 'comanda.cancelar', itemCancelar: 'item.cancelar', checkin: 'checkin', checkout: 'checkout', eventoEditar: 'evento.editar',
-  clientesVer: 'clientes.ver', clientesEditar: 'clientes.editar', clientesCadastro: 'clientes.cadastro', produtosVer: 'produtos.ver', produtosEditar: 'produtos.editar',
+  clientesVer: 'clientes.ver', clientesEditar: 'clientes.editar', clientesCadastro: 'clientes.cadastro', clientesCategorias: 'clientes.categorias', produtosVer: 'produtos.ver', produtosEditar: 'produtos.editar',
   producaoVer: 'producao.ver', producaoConfigurar: 'producao.configurar', fiscalVer: 'fiscal.ver', fiscalEmitir: 'fiscal.emitir',
   fiscalCancelar: 'fiscal.cancelar', estoqueVer: 'estoque.ver', estoqueMovimentar: 'estoque.movimentar', estoqueAjustar: 'estoque.ajustar',
   relatorios: 'relatorios', usuarios: 'usuarios.gerenciar', implantacao: 'implantacao',

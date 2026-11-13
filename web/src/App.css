@@ -274,3 +274,8 @@ button:disabled { opacity: 0.5; cursor: default; }
   .garcom .contador { margin-left: 0; }
   .acoes > button { flex: 1 1 0; padding: 0.75em; }
 }
+
+/* categorias de cliente */
+p.dica { color: var(--muted); font-size: 0.9rem; margin: 0.25rem 0 0.75rem; }
+fieldset.isencoes { border: 1px solid var(--border); border-radius: 6px; margin: 0.75rem 0; display: flex; flex-wrap: wrap; gap: 0.25rem 1.25rem; }
+fieldset.isencoes legend { padding: 0 0.25rem; color: var(--muted); font-size: 0.9rem; }

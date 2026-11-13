@@ -1,7 +1,8 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { api, P, type Cliente, type ClienteCategoria, type ClienteInput } from '../api'
 import { useSessao } from '../sessao'
 import { cpfValido, erroCpf, mascaraCpf, soDigitos } from '../documento'
+import ClienteCategorias from '../components/ClienteCategorias'
 
 const vazio: ClienteInput = {
   cpf: null, nome: '', celular: null, email: null, dataNascimento: null, sexo: null,
@@ -12,6 +13,26 @@ const fmtCpf = (v: string | null) => (v ? mascaraCpf(v) : '—')
 const fmtCel = (v: string | null) => v?.replace(/(\d{2})(\d{4,5})(\d{4})$/, '($1) $2-$3') ?? '—'
 
 export default function Clientes() {
+  const { pode } = useSessao()
+  const [aba, setAba] = useState<'clientes' | 'categorias'>('clientes')
+  const [msgCat, setMsgCat] = useState<{ tipo: 'erro' | 'ok'; texto: string }>()
+  const abas = pode(P.clientesCategorias) && (
+    <span className="segmentado mini">
+      <button className={aba === 'clientes' ? 'ativo' : ''} onClick={() => setAba('clientes')}>Clientes</button>
+      <button className={aba === 'categorias' ? 'ativo' : ''} onClick={() => setAba('categorias')}>Categorias</button>
+    </span>
+  )
+  if (aba === 'categorias') return (
+    <section className="clientes">
+      <div className="filtros">{abas}</div>
+      {msgCat && <p className={msgCat.tipo}>{msgCat.texto}</p>}
+      <ClienteCategorias onMsg={setMsgCat} />
+    </section>
+  )
+  return <ListaClientes abas={abas} />
+}
+
+function ListaClientes({ abas }: { abas: ReactNode }) {
   const podeEditar = useSessao().pode(P.clientesEditar)
   const [categorias, setCategorias] = useState<ClienteCategoria[]>([])
   const [busca, setBusca] = useState('')
@@ -73,6 +94,7 @@ export default function Clientes() {
   return (
     <section className="clientes">
       <div className="filtros">
+        {abas}
         <input placeholder="Buscar por nome, CPF ou celular…" value={busca} onChange={e => setBusca(e.target.value)} autoFocus />
         {podeEditar && <button onClick={novo}>+ Novo cliente</button>}
         <span className="contador">{lista.length} encontrados</span>
@@ -98,7 +120,7 @@ export default function Clientes() {
             </label>
             <label>Categoria
               <select value={form.categoriaId ?? ''} onChange={e => set('categoriaId', e.target.value ? Number(e.target.value) : null)}>
-                <option value="">Normal</option>
+                {!categorias.some(c => c.nome === 'Normal') && <option value="">Normal</option>}
                 {categorias.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
               </select>
             </label>
