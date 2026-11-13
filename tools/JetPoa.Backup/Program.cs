@@ -12,6 +12,8 @@ using Oracle.ManagedDataAccess.Types;
 //   JetPoa.Backup exportar  <arquivo.zip> [--conf <arquivo.conf>]
 //   JetPoa.Backup verificar <arquivo.zip>
 //   JetPoa.Backup restaurar <arquivo.zip> [--conf <arquivo.conf> | --conexao "<connection string>"]
+//   JetPoa.Backup testar    <arquivo.zip> [--conf <arquivo.conf>]
+//       pede a senha do SYSTEM, cria o esquema temporário BISTRO_RESTORE, restaura nele, compara com o BISTRO e apaga.
 //
 // A conexão vem de ConnectionStrings__Bistro no .conf (padrão C:\Projeto\certificado\52822987000123.conf).
 // Restaurar exige o esquema de destino vazio (usuário criado pelo db\00 e db\00b, sem tabelas).
@@ -30,6 +32,7 @@ static class Backup
         {
             if (args.Length < 2) return Uso();
             var arquivo = Path.GetFullPath(args[1]);
+            if (args[0] != "exportar") arquivo = DoPacote(arquivo);
             string? Opcao(string nome) { var i = Array.IndexOf(args, nome); return i >= 0 && i + 1 < args.Length ? args[i + 1] : null; }
             string Conexao() => Opcao("--conexao") ?? LerConf(Opcao("--conf") ?? ConfPadrao);
             switch (args[0].ToLowerInvariant())
@@ -37,6 +40,7 @@ static class Backup
                 case "exportar": await Exportar(Conexao(), arquivo); break;
                 case "verificar": Verificar(arquivo); break;
                 case "restaurar": await Restaurar(Conexao(), arquivo); break;
+                case "testar": await TestarRestauracao(Conexao(), arquivo); break;
                 default: return Uso();
             }
             return 0;
@@ -52,6 +56,16 @@ static class Backup
     {
         Console.Error.WriteLine("Uso: JetPoa.Backup exportar|verificar|restaurar <arquivo.zip> [--conf <arquivo.conf>] [--conexao \"...\"]");
         return 2;
+    }
+
+    /// <summary>Aceita também o pacote diário (jetpoa-backup-*.zip): usa o bistro.zip de dentro dele.</summary>
+    static string DoPacote(string arquivo)
+    {
+        using var zip = ZipFile.OpenRead(arquivo);
+        if (zip.GetEntry("manifesto.json") is not null || zip.GetEntry("bistro.zip") is not { } interno) return arquivo;
+        var temp = Path.Combine(Path.GetTempPath(), $"bistro-{Guid.NewGuid():N}.zip");
+        interno.ExtractToFile(temp);
+        return temp;
     }
 
     static string LerConf(string caminho)
@@ -147,12 +161,28 @@ static class Backup
         return tipo switch
         {
             "DECIMAL" or "NUMBER" or "INT16" or "INT32" or "INT64" or "DOUBLE" or "SINGLE" =>
-                JsonValue.Create(r.GetOracleDecimal(i).ToString()),   // texto: preserva todas as casas
+                JsonValue.Create(Numero(r.GetOracleDecimal(i))),   // texto com ponto: preserva todas as casas
             "DATE" => JsonValue.Create(r.GetDateTime(i).ToString("yyyy-MM-ddTHH:mm:ss", Inv)),
             "TIMESTAMP" or "TIMESTAMPTZ" or "TIMESTAMPLTZ" => JsonValue.Create(r.GetOracleTimeStamp(i).Value.ToString("yyyy-MM-ddTHH:mm:ss.fffffff", Inv)),
             "BLOB" or "RAW" or "LONGRAW" => JsonValue.Create(Convert.ToBase64String((byte[])r.GetValue(i))),
             _ => JsonValue.Create(r.GetValue(i) is string s ? s : Convert.ToString(r.GetValue(i), Inv)),
         };
+    }
+
+    /// <summary>Número sempre com ponto decimal, independente do idioma do Windows.</summary>
+    static string Numero(OracleDecimal d)
+    {
+        try { return d.Value.ToString(Inv); }
+        catch (OverflowException) { return NormalizarNumero(d.ToString()); }   // mais de 28 dígitos
+    }
+
+    /// <summary>Aceita backups gravados com vírgula decimal (",8", "12,5") — formato dos primeiros backups.</summary>
+    static string NormalizarNumero(string s)
+    {
+        s = s.Trim().Replace(',', '.');
+        if (s.StartsWith('.')) s = "0" + s;
+        if (s.StartsWith("-.")) s = "-0" + s[1..];
+        return s;
     }
 
     static string Metadado(OracleConnection c, OracleTransaction tx, string tipo, string nome)
@@ -178,7 +208,15 @@ static class Backup
             if (e is null) { erros.Add($"faltam os dados de {t.Nome}"); continue; }
             using var rd = new StreamReader(e.Open());
             long n = 0;
-            while (rd.ReadLine() is { } l) { if (JsonNode.Parse(l) is not JsonArray a || a.Count != t.Colunas.Count) erros.Add($"{t.Nome}: linha {n + 1} inválida"); n++; }
+            while (rd.ReadLine() is { } l)
+            {
+                n++;
+                if (JsonNode.Parse(l) is not JsonArray a || a.Count != t.Colunas.Count) { erros.Add($"{t.Nome}: linha {n} inválida"); continue; }
+                // cada valor precisa ser legível na restauração
+                for (var i = 0; i < a.Count; i++)
+                    try { Parametro("p", t.Colunas[i].Tipo, a[i]); }
+                    catch (Exception ex) { erros.Add($"{t.Nome}: linha {n}, {t.Colunas[i].Nome}: {ex.Message}"); }
+            }
             if (n != t.Linhas) erros.Add($"{t.Nome}: {n} linhas, manifesto diz {t.Linhas}");
             if (!ddl.Any(d => d.Etapa == "TABELA" && d.Nome == t.Nome)) erros.Add($"{t.Nome}: sem estrutura");
         }
@@ -246,9 +284,16 @@ static class Backup
             {
                 var a = (JsonArray)JsonNode.Parse(l)!;
                 using var cmd = Comando(c, tx, sql);
-                for (var i = 0; i < cols.Count; i++) cmd.Parameters.Add(Parametro($"p{i}", cols[i].Tipo, a[i]));
-                cmd.ExecuteNonQuery();
                 n++;
+                try
+                {
+                    for (var i = 0; i < cols.Count; i++) cmd.Parameters.Add(Parametro($"p{i}", cols[i].Tipo, a[i]));
+                    cmd.ExecuteNonQuery();
+                }
+                catch (Exception e)
+                {
+                    throw new InvalidOperationException($"DADOS {t.Nome}, linha {n} ({string.Join(", ", cols.Select(x => x.Nome + ":" + x.Tipo))}): {e.Message}", e);
+                }
             }
             tx.Commit();
             var conferido = Escalar<decimal>(c, null, $"select count(*) from \"{t.Nome}\"");
@@ -262,6 +307,96 @@ static class Backup
         var invalidos = Lista(c, null, "select object_type || ' ' || object_name from user_objects where status <> 'VALID'");
         if (invalidos.Count > 0) throw new InvalidOperationException("Objetos inválidos após restaurar: " + string.Join(", ", invalidos));
         Console.WriteLine($"Restaurado em {destino} o backup de {m.Esquema} de {m.GeradoEm:dd/MM/yyyy HH:mm}.");
+    }
+
+    // ------------------------------------------------------------------ testar
+    const string EsquemaTeste = "BISTRO_RESTORE";
+
+    /// <summary>Restaura o backup num esquema temporário do mesmo Oracle, compara com a origem e apaga o esquema.</summary>
+    static async Task TestarRestauracao(string conexao, string arquivo)
+    {
+        var b = new OracleConnectionStringBuilder(conexao);
+        var origem = b.UserID.ToUpperInvariant();
+        Console.Write($"Senha do SYSTEM em {b.DataSource}: ");
+        var senha = LerSenha();
+        var sys = new OracleConnectionStringBuilder { DataSource = b.DataSource, UserID = "system", Password = senha }.ConnectionString;
+
+        using var c = new OracleConnection(sys);
+        await c.OpenAsync();
+        // sobra de um teste anterior interrompido: o esquema é só de teste, pode apagar
+        if (Escalar<decimal>(c, null, $"select count(*) from dba_users where username = '{EsquemaTeste}'") > 0)
+        {
+            Apagar(c);
+            Console.WriteLine($"Sobra de teste anterior ({EsquemaTeste}) apagada.");
+        }
+
+        // mesmos tablespaces e cotas da origem
+        var padrao = Escalar<string>(c, null, $"select default_tablespace from dba_users where username = '{origem}'");
+        var cotas = Lista(c, null, $"select tablespace_name from dba_ts_quotas where username = '{origem}'");
+        var senhaTeste = "R" + Guid.NewGuid().ToString("N")[..20];
+        Executar(c, null, $"create user {EsquemaTeste} identified by \"{senhaTeste}\" default tablespace \"{padrao}\" temporary tablespace temp "
+                          + string.Join(" ", cotas.Select(t => $"quota unlimited on \"{t}\"")));
+        Console.WriteLine($"Esquema temporário {EsquemaTeste} criado.");
+        try
+        {
+            Executar(c, null, $"grant create session, create table, create sequence, create trigger to {EsquemaTeste}");
+            // sem pool: a conexão fecha de verdade e o drop user do final não esbarra em sessão aberta (ORA-01940)
+            await Restaurar(new OracleConnectionStringBuilder { DataSource = b.DataSource, UserID = EsquemaTeste, Password = senhaTeste, Pooling = false }.ConnectionString, arquivo);
+
+            // compara os objetos com a origem (tipo e nome)
+            var sql = "select object_type || ' ' || object_name from dba_objects where owner = :o and object_name not like 'SYS\\_%' escape '\\' and object_type <> 'LOB' order by 1";
+            List<string> Objetos(string dono)
+            {
+                using var cmd = Comando(c, null, sql);
+                cmd.Parameters.Add("o", dono);
+                using var r = cmd.ExecuteReader();
+                var l = new List<string>();
+                while (r.Read()) l.Add(r.GetString(0));
+                return l;
+            }
+            var a = Objetos(origem);
+            var d = Objetos(EsquemaTeste);
+            var faltam = a.Except(d).ToList();
+            var sobram = d.Except(a).ToList();
+            if (faltam.Count > 0 || sobram.Count > 0)
+                throw new InvalidOperationException($"Restaurado diferente de {origem}. Faltam: {string.Join(", ", faltam)}. Sobram: {string.Join(", ", sobram)}");
+            Console.WriteLine($"Comparação: os {a.Count} objetos de {origem} existem na cópia restaurada.");
+            Console.WriteLine("TESTE DE RESTAURAÇÃO OK.");
+        }
+        finally
+        {
+            // falha ao apagar não pode esconder o erro do teste
+            try { Apagar(c); Console.WriteLine($"Esquema temporário {EsquemaTeste} apagado."); }
+            catch (Exception e) { Console.Error.WriteLine($"Aviso: não apagou {EsquemaTeste} ({e.Message}). O próximo teste apaga."); }
+        }
+    }
+
+    /// <summary>Derruba sessões que sobraram do esquema de teste e apaga o usuário.</summary>
+    static void Apagar(OracleConnection sys)
+    {
+        OracleConnection.ClearAllPools();
+        foreach (var s in Lista(sys, null, $"select sid || ',' || serial# from v$session where username = '{EsquemaTeste}'"))
+            try { Executar(sys, null, $"alter system kill session '{s}' immediate"); } catch (OracleException) { /* já saiu */ }
+        for (var tentativa = 1; ; tentativa++)
+        {
+            try { Executar(sys, null, $"drop user {EsquemaTeste} cascade"); return; }
+            catch (OracleException e) when (e.Number == 1940 && tentativa < 10) { Thread.Sleep(1000); }
+        }
+    }
+
+    static string LerSenha()
+    {
+        if (Console.IsInputRedirected) return Console.ReadLine() ?? "";
+        var sb = new StringBuilder();
+        while (true)
+        {
+            var k = Console.ReadKey(intercept: true);
+            if (k.Key == ConsoleKey.Enter) break;
+            if (k.Key == ConsoleKey.Backspace) { if (sb.Length > 0) sb.Length--; continue; }
+            if (!char.IsControl(k.KeyChar)) sb.Append(k.KeyChar);
+        }
+        Console.WriteLine();
+        return sb.ToString();
     }
 
     /// <summary>get_ddl de trigger vem com o ALTER TRIGGER ... ENABLE junto: separa em dois comandos.</summary>
@@ -283,7 +418,7 @@ static class Backup
         {
             case "DECIMAL" or "NUMBER" or "INT16" or "INT32" or "INT64" or "DOUBLE" or "SINGLE":
                 p.OracleDbType = OracleDbType.Decimal;
-                p.Value = s is null ? DBNull.Value : OracleDecimal.Parse(s);
+                p.Value = s is null ? DBNull.Value : decimal.Parse(NormalizarNumero(s), NumberStyles.Float, Inv);
                 break;
             case "DATE":
                 p.OracleDbType = OracleDbType.Date;

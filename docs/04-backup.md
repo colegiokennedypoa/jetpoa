@@ -72,11 +72,13 @@ Register-ScheduledTask -TaskName 'JetPOA Backup' -Force -User 'SYSTEM' -RunLevel
 7. **Rotina de backup:** reinstale-a no computador novo, com o bloco "Instalar ou atualizar a rotina" acima.
 
 ## Testar a restauração sem mexer no BISTRO
-Como SYSTEM, crie um esquema vazio de teste, restaure nele e apague-o depois:
-```sql
-create user bistro_restore identified by "<senha>" default tablespace db_bistro temporary tablespace temp
-  quota unlimited on db_bistro quota unlimited on db_ind_bistro quota unlimited on db_lob_bistro;
-grant create session, create table, create sequence, create trigger to bistro_restore;
--- JetPoa.Backup.exe restaurar <bistro.zip> --conexao "User Id=bistro_restore;Password=<senha>;Data Source=192.168.0.109:1521/XE"
-drop user bistro_restore cascade;
+Recomendado uma vez por mês e depois de mudanças grandes no banco. Pede a senha do SYSTEM e faz tudo sozinho:
+```powershell
+C:\Projeto\JetPOA\backup\ferramenta\JetPoa.Backup.exe testar C:\Projeto\JetPOA\backup\jetpoa-backup-<data>.zip
 ```
+1. Cria o esquema temporário `BISTRO_RESTORE`, nos mesmos tablespaces.
+2. Restaura nele o backup e confere a quantidade de linhas.
+3. Compara todos os objetos com o BISTRO.
+4. Apaga o `BISTRO_RESTORE`.
+
+Termina com **"TESTE DE RESTAURAÇÃO OK."**. Primeiro teste aprovado em 13/11/2026: 26 tabelas, 3.245 linhas e 132 objetos.
