@@ -1,4 +1,4 @@
-# JetPOA Bistrô — backup diário (tarefa agendada "JetPOA Backup", 04:00, usuário SYSTEM).
+﻿# JetPOA Bistrô — backup diário (tarefa agendada "JetPOA Backup", 04:00, usuário SYSTEM).
 #
 # Junta num único .zip tudo o que é preciso para reinstalar em outro computador:
 #   bistro.zip        esquema Oracle BISTRO (estrutura + dados), gerado pelo JetPoa.Backup
