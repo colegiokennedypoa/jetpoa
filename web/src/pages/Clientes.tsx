@@ -34,6 +34,7 @@ export default function Clientes() {
 
 function ListaClientes({ abas }: { abas: ReactNode }) {
   const podeEditar = useSessao().pode(P.clientesEditar)
+  const podeExcluir = useSessao().pode(P.clientesCadastro)
   const [categorias, setCategorias] = useState<ClienteCategoria[]>([])
   const [busca, setBusca] = useState('')
   const [lista, setLista] = useState<Cliente[]>([])
@@ -82,6 +83,19 @@ function ListaClientes({ abas }: { abas: ReactNode }) {
       else await api.criarCliente(dados)
       setMsg({ tipo: 'ok', texto: 'Cliente salvo.' })
       setForm(null)
+      carregar()
+    } catch (err) {
+      setMsg({ tipo: 'erro', texto: (err as Error).message })
+    }
+  }
+
+  // só exclui cliente sem comandas (o servidor confere e explica quando não pode)
+  const excluir = async (c: Cliente) => {
+    if (!window.confirm(`Excluir o cliente ${c.nome}?\nIsso apaga o cadastro de vez. Só é permitido se ele não tiver nenhuma comanda.`)) return
+    try {
+      await api.excluirCliente(c.id)
+      if (editId === c.id) setForm(null)
+      setMsg({ tipo: 'ok', texto: `Cliente ${c.nome} excluído.` })
       carregar()
     } catch (err) {
       setMsg({ tipo: 'erro', texto: (err as Error).message })
@@ -146,7 +160,10 @@ function ListaClientes({ abas }: { abas: ReactNode }) {
             <tr key={c.id} className={c.ativo === 'S' ? '' : 'inativo'}>
               <td>{c.nome}</td><td>{fmtCpf(c.cpf)}</td><td>{fmtCel(c.celular)}</td><td>{c.categoria}</td>
               <td>{c.aceitaComunicacao === 'S' ? 'Sim' : 'Não'}</td>
-              <td>{podeEditar && <button className="sec" onClick={() => editar(c)}>Editar</button>}</td>
+              <td className="acoes-linha">
+                {podeEditar && <button className="sec" onClick={() => editar(c)}>Editar</button>}
+                {podeExcluir && <button className="sec" onClick={() => excluir(c)}>Excluir</button>}
+              </td>
             </tr>
           ))}
         </tbody>

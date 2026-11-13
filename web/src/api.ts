@@ -247,6 +247,7 @@ export const api = {
   criarCliente: (c: ClienteInput) => req<{ id: number }>('/api/clientes', { method: 'POST', body: JSON.stringify(c) }),
   atualizarCliente: (id: number, c: ClienteInput) =>
     req<void>(`/api/clientes/${id}`, { method: 'PUT', body: JSON.stringify(c) }),
+  excluirCliente: (id: number) => req<void>(`/api/clientes/${id}`, { method: 'DELETE' }),
 
   garcons: () => req<Garcom[]>('/api/garcons'),
   areas: (todas = false) => req<Area[]>(`/api/areas${todas ? '?todas=true' : ''}`),

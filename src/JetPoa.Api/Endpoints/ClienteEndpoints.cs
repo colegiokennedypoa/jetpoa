@@ -175,6 +175,33 @@ public static class ClienteEndpoints
                 return Results.Conflict(new { erro = "Já existe cliente com este CPF." });
             }
         }).RequireAuthorization(Permissoes.ClientesCadastro);   // editar existente: só quem tem a tela Clientes
+
+        // Excluir: só cliente sem nada ligado (nenhuma comanda, nem antiga). Com histórico, use "Ativo" desmarcado.
+        g.MapDelete("/clientes/{id:long}", async (ClaimsPrincipal user, Db db, long id, CancellationToken ct) =>
+        {
+            using var c = await db.OpenAsync(ct);
+            using var tx = c.BeginTransaction();
+            var nome = await c.ExecuteScalarAsync<string?>("select nome from cliente where id = :id for update", new { id }, tx);
+            if (nome is null) return Results.NotFound(new { erro = "Cliente não encontrado." });
+            var comandas = await c.ExecuteScalarAsync<int>("select count(*) from comanda where cliente_id = :id", new { id }, tx);
+            if (comandas > 0)
+                return Results.Conflict(new { erro = $"{nome} tem {comandas} comanda(s) no histórico e não pode ser excluído. Desmarque \"Ativo\" para tirá-lo das buscas." });
+            try
+            {
+                await c.ExecuteAsync("delete from cliente where id = :id", new { id }, tx);
+            }
+            catch (OracleException e) when (e.Number == 2292)   // outro vínculo (chave estrangeira) criado depois
+            {
+                return Results.Conflict(new { erro = $"{nome} tem registros vinculados e não pode ser excluído. Desmarque \"Ativo\" para tirá-lo das buscas." });
+            }
+            // auditoria só com id e nome: os dados pessoais saem de fato do banco
+            await c.ExecuteAsync("""
+                insert into auditoria (usuario_id, entidade, entidade_id, acao, detalhe)
+                values (:usr, 'CLIENTE', :eid, 'EXCLUIR', :det)
+                """, new { usr = user.Id(), eid = id.ToString(), det = JsonSerializer.Serialize(new { nome }) }, tx);
+            tx.Commit();
+            return Results.NoContent();
+        }).RequireAuthorization(Permissoes.ClientesCadastro);
     }
 
     /// <summary>409 informando quem já usa o CPF (o índice único uk_cliente_cpf é a garantia final).</summary>
