@@ -197,7 +197,7 @@ public static class ClienteEndpoints
         var depois = new
         {
             nome,
-            desc = Math.Round(i.DescontoPctPadrao, 2),
+            desconto = Math.Round(i.DescontoPctPadrao, 2),
             est = i.IsentaEstacionamento ? "S" : "N",
             emb = i.IsentaEmbarque ? "S" : "N",
             cou = i.IsentaCouvert ? "S" : "N",
@@ -232,16 +232,16 @@ public static class ClienteEndpoints
                 await c.ExecuteAsync("""
                     insert into cliente_categoria (nome, desconto_pct_padrao, isenta_estacionamento, isenta_embarque, isenta_couvert,
                                                    isenta_taxa_servico, limite_comanda, ativo)
-                    values (:nome, :desc, :est, :emb, :cou, :ser, :lim, :ativo)
+                    values (:nome, :desconto, :est, :emb, :cou, :ser, :lim, :ativo)
                     """, depois, tx);
                 id = await c.ExecuteScalarAsync<long>("select id from cliente_categoria where nome = :nome", new { nome }, tx);
             }
             else
                 await c.ExecuteAsync("""
-                    update cliente_categoria set nome = :nome, desconto_pct_padrao = :desc, isenta_estacionamento = :est,
+                    update cliente_categoria set nome = :nome, desconto_pct_padrao = :desconto, isenta_estacionamento = :est,
                            isenta_embarque = :emb, isenta_couvert = :cou, isenta_taxa_servico = :ser, limite_comanda = :lim, ativo = :ativo
                      where id = :id
-                    """, new { id, depois.nome, depois.desc, depois.est, depois.emb, depois.cou, depois.ser, depois.lim, depois.ativo }, tx);
+                    """, new { id, depois.nome, depois.desconto, depois.est, depois.emb, depois.cou, depois.ser, depois.lim, depois.ativo }, tx);
         }
         catch (OracleException e) when (e.Number == 1)
         {
