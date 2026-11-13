@@ -11,6 +11,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{40C71B85
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "JetPoa.Tests", "tests\JetPoa.Tests\JetPoa.Tests.csproj", "{09D3CE2B-3D36-4373-BC49-7C5E21CA6070}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tools", "tools", "{6BA2CD68-5EA0-4C9A-933A-55E949D19D1E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "JetPoa.Backup", "tools\JetPoa.Backup\JetPoa.Backup.csproj", "{C86E63A2-20D7-4C59-A02B-A8303B47B7D1}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -28,9 +32,14 @@ Global
 		{09D3CE2B-3D36-4373-BC49-7C5E21CA6070}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{09D3CE2B-3D36-4373-BC49-7C5E21CA6070}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{09D3CE2B-3D36-4373-BC49-7C5E21CA6070}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C86E63A2-20D7-4C59-A02B-A8303B47B7D1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C86E63A2-20D7-4C59-A02B-A8303B47B7D1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C86E63A2-20D7-4C59-A02B-A8303B47B7D1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C86E63A2-20D7-4C59-A02B-A8303B47B7D1}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{8DFE4509-1F99-4B17-8A7A-2C220C9F2FD8} = {A06847A6-82B2-4119-9EEB-57F5CD713430}
 		{09D3CE2B-3D36-4373-BC49-7C5E21CA6070} = {40C71B85-6A55-44F1-BBA0-67A45440A3E0}
+		{C86E63A2-20D7-4C59-A02B-A8303B47B7D1} = {6BA2CD68-5EA0-4C9A-933A-55E949D19D1E}
 	EndGlobalSection
 EndGlobal

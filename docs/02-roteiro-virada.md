@@ -78,6 +78,7 @@ Se algo impedir a operação no D0:
 | Código | GitHub `colegiokennedypoa/jetpoa` |
 | Programa instalado | `C:\Projeto\JetPOA\app` (serviço `JetPOABistro`, porta 5080) |
 | Posição das comandas (contingência) | `C:\Projeto\JetPOA\posicao-comandas` (um arquivo por dia) |
+| Backup diário (04:00) | `C:\Projeto\JetPOA\backup` e `s3://jetpoa/jetpoa-bistro/`; restauração em [`docs\04-backup.md`](04-backup.md) |
 | Configuração e segredos | `C:\Projeto\certificado\52822987000123.conf` (fora do Git) |
 | Certificado A1 | `C:\Projeto\certificado\52822987000123.pfx` |
 | Banco | Oracle XE `192.168.0.109:1521/XE`, esquema `BISTRO` (o Forms continua no `ADMINISTRATIVO`) |
