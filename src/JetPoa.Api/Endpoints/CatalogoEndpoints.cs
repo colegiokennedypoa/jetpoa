@@ -24,6 +24,7 @@ public static class CatalogoEndpoints
         public string? ImpressoraHost { get; set; }
         public int? ImpressoraPorta { get; set; }
         public int ColunasImpressao { get; set; } = 48;
+        public string Protocolo { get; set; } = "ESCPOS";
     }
 
     public sealed class ProdutoResumo
@@ -85,7 +86,7 @@ public static class CatalogoEndpoints
         {
             using var c = await db.OpenAsync(ct);
             return await c.QueryAsync<SetorProducao>(
-                "select id, codigo, nome, imprime, impressora_host, impressora_porta, colunas_impressao from setor_producao where ativo = 'S' order by id");
+                "select id, codigo, nome, imprime, impressora_host, impressora_porta, colunas_impressao, protocolo from setor_producao where ativo = 'S' order by id");
         });
 
         g.MapGet("/produtos", async (Db db, string? busca, long? categoriaId, bool? somenteAtivos, bool? pendenciaFiscal, bool? somenteVendiveis, CancellationToken ct) =>

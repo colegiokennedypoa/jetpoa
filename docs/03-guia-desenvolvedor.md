@@ -124,6 +124,7 @@ scripts/                  publicar.ps1, instalar-servico.ps1, atualizar.ps1
 | `11` | `comanda.menor_idade` (S/N), fixado na abertura por `Endpoints/MenorIdade.cs` (nascimento do cliente ou declaração da portaria) |
 | `12` | `envio_producao.mesa` e `comanda.mesa` (texto livre, até 20): mesa de entrega de cada pedido, obrigatória ao lançar, impressa em destaque no ticket de produção; a da comanda é sugerida no próximo pedido |
 | `13` | `comanda_pagamento.previo` (S/N), `registrado_por`, `observacao`: pagamento feito com a comanda aberta, abatido no fechamento (`FechamentoEndpoints`, rotas `pagamentos-previos`) |
+| `14` | `setor_producao.protocolo` (`ESCPOS`/`BEMA`): linguagem de comandos da impressora do setor, usada por `Impressao/EscPos.cs`. Garçom (MP-4200 TH) em `BEMA` |
 
 Todos os scripts até o `10` **já foram aplicados** no banco de produção. As colunas são snake_case e o Dapper mapeia para PascalCase (`MatchNamesWithUnderscores`).
 

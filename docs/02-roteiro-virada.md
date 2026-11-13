@@ -34,7 +34,7 @@ A tela **Implantação** mostra o checklist ao vivo. Este roteiro diz **quando**
    > Para publicar sem o script: `cd web; npm run build; cd ..` e depois `dotnet publish src\JetPoa.Api\JetPoa.Api.csproj -c Release -o C:\Projeto\JetPOA\app`.
 2. **Usuários** (tela Usuários): Administrador → Gerentes → Caixas → Garçons/Portaria. Cada um recebe uma senha provisória e troca no primeiro acesso. Gerentes cadastram também um PIN de autorização.
 3. **Impressoras** (tela Produção): conferir o IP de Cozinha, Bar e Garçom e usar "Imprimir teste" em cada uma. O **Caixa** (DANFE e conferência) imprime na impressora padrão do Windows do computador do caixa: deixe a térmica como padrão e, de preferência, abra o navegador com `--kiosk-printing`.
-   - Se a Bematech imprimir caracteres estranhos, colocar a impressora em modo **ESC/POS** (menu da impressora ou utilitário Bematech).
+   - Se o ticket sair com `!` ou `VB` soltos, a impressora está em outra linguagem de comandos. Em Produção, troque a **Linguagem** do setor ("Bematech ESC/Bema" para MP-4200 no modo de fábrica, "ESC/POS" para a G250) e imprima o teste de novo.
 4. **Contador** (tela Produtos → "Só com pendência fiscal"): completar NCM, CFOP, CSOSN e CST dos produtos pendentes (77 em 11/11).
 5. **Clientes** (tela Implantação → "Prévia: importar clientes" → "Importar"): cerca de 2.545 clientes do mailing, reservas e comandas antigas, sem duplicar. Ninguém entra como "aceita comunicação": o consentimento LGPD é colhido no check-in.
 6. **Eventos** (Check-in → Eventos): cadastrar os próximos eventos com taxas de terra/rio e couvert.
@@ -82,5 +82,5 @@ Se algo impedir a operação no D0:
 | Configuração e segredos | `C:\Projeto\certificado\52822987000123.conf` (fora do Git) |
 | Certificado A1 | `C:\Projeto\certificado\52822987000123.pfx` |
 | Banco | Oracle XE `192.168.101.12:1521/XE` (máquina virtual `kennedy` deste servidor), esquema `BISTRO` (o Forms continua no `ADMINISTRATIVO`) |
-| Scripts do banco | `db\00` a `db\13` (ordem no README) |
+| Scripts do banco | `db\00` a `db\14` (ordem no README) |
 | Guia do desenvolvedor | [`docs\03-guia-desenvolvedor.md`](03-guia-desenvolvedor.md) |

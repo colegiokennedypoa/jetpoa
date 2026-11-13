@@ -30,9 +30,10 @@ public static class ProducaoEndpoints
         public string? Host { get; set; }
         public int? Porta { get; set; }
         public int Colunas { get; set; } = 48;
+        public string Protocolo { get; set; } = "ESCPOS";
     }
 
-    public sealed record SetorInput(string? ImpressoraHost, int? ImpressoraPorta, bool Imprime, int? ColunasImpressao);
+    public sealed record SetorInput(string? ImpressoraHost, int? ImpressoraPorta, bool Imprime, int? ColunasImpressao, string? Protocolo = null);
 
     public static void MapProducao(this IEndpointRouteBuilder app)
     {
@@ -92,13 +93,17 @@ public static class ProducaoEndpoints
                 return Results.UnprocessableEntity(new { erro = "Informe o IP da impressora." });
             if (i.ImpressoraPorta is < 1 or > 65535)
                 return Results.UnprocessableEntity(new { erro = "Porta inválida." });
+            var protocolo = i.Protocolo?.Trim().ToUpperInvariant();
+            if (protocolo is not (null or "ESCPOS" or "BEMA"))
+                return Results.UnprocessableEntity(new { erro = "Linguagem da impressora inválida (ESCPOS ou BEMA)." });
             using var c = await db.OpenAsync(ct);
             var n = await c.ExecuteAsync("""
                 update setor_producao
                    set impressora_host = :host, impressora_porta = nvl(:porta, 9100),
-                       imprime = :imprime, colunas_impressao = nvl(:colunas, colunas_impressao)
+                       imprime = :imprime, colunas_impressao = nvl(:colunas, colunas_impressao),
+                       protocolo = nvl(:protocolo, protocolo)
                  where id = :id
-                """, new { id, host, porta = i.ImpressoraPorta, imprime = i.Imprime ? "S" : "N", colunas = i.ColunasImpressao });
+                """, new { id, host, porta = i.ImpressoraPorta, imprime = i.Imprime ? "S" : "N", colunas = i.ColunasImpressao, protocolo });
             return n == 0 ? Results.NotFound() : Results.NoContent();
         });
 
@@ -106,7 +111,7 @@ public static class ProducaoEndpoints
         {
             using var c = await db.OpenAsync(ct);
             var setor = await c.QuerySingleOrDefaultAsync<SetorTeste>(
-                "select nome, impressora_host host, impressora_porta porta, colunas_impressao colunas from setor_producao where id = :id", new { id });
+                "select nome, impressora_host host, impressora_porta porta, colunas_impressao colunas, protocolo from setor_producao where id = :id", new { id });
             if (setor is null) return Results.NotFound();
             if (string.IsNullOrWhiteSpace(setor.Host))
                 return Results.UnprocessableEntity(new { erro = "Setor sem impressora configurada." });
@@ -115,7 +120,7 @@ public static class ProducaoEndpoints
             try
             {
                 await ImpressoraRede.EnviarAsync(setor.Host, setor.Porta ?? 9100,
-                    ImpressaoProducao.TicketTeste(setor.Nome, setor.Colunas, remover), ct);
+                    ImpressaoProducao.TicketTeste(setor.Nome, setor.Colunas, remover, setor.Protocolo), ct);
                 return Results.Ok(new { ok = true, mensagem = $"Teste enviado para {setor.Host}:{setor.Porta ?? 9100}." });
             }
             catch (IOException e)

@@ -62,6 +62,8 @@ export type Area = { id: number; codigo: string; nome: string; ativo: 'S' | 'N' 
 export type Setor = {
   id: number; codigo: string; nome: string; imprime: string
   impressoraHost: string | null; impressoraPorta: number | null; colunasImpressao: number
+  /** linguagem de comandos: ESCPOS (padrão) ou BEMA (Bematech nativo) */
+  protocolo: 'ESCPOS' | 'BEMA'
 }
 
 export type ComandaResumo = {
@@ -275,7 +277,7 @@ export const api = {
   envios: (somenteErros: boolean) => req<Envio[]>(`/api/producao/envios?somenteErros=${somenteErros}`),
   reimprimir: (id: number) => req<void>(`/api/producao/envios/${id}/reimprimir`, { method: 'POST' }),
   tentarNovamente: (id: number) => req<void>(`/api/producao/envios/${id}/tentar-novamente`, { method: 'POST' }),
-  salvarSetor: (id: number, s: { impressoraHost: string | null; impressoraPorta: number | null; imprime: boolean; colunasImpressao: number }) =>
+  salvarSetor: (id: number, s: { impressoraHost: string | null; impressoraPorta: number | null; imprime: boolean; colunasImpressao: number; protocolo: 'ESCPOS' | 'BEMA' }) =>
     req<void>(`/api/setores/${id}`, { method: 'PUT', body: JSON.stringify(s) }),
   testarSetor: (id: number) => req<{ mensagem: string }>(`/api/setores/${id}/teste`, { method: 'POST' }),
 

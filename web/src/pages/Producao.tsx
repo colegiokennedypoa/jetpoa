@@ -66,12 +66,13 @@ function SetorCard({ setor, onMsg }: { setor: Setor; onMsg: (m: { tipo: 'ok' | '
   const [host, setHost] = useState(setor.impressoraHost ?? '')
   const [porta, setPorta] = useState(String(setor.impressoraPorta ?? 9100))
   const [imprime, setImprime] = useState(setor.imprime === 'S')
+  const [protocolo, setProtocolo] = useState<'ESCPOS' | 'BEMA'>(setor.protocolo ?? 'ESCPOS')
   const [ocupado, setOcupado] = useState(false)
 
   const salvar = async () => {
     setOcupado(true)
     try {
-      await api.salvarSetor(setor.id, { impressoraHost: host || null, impressoraPorta: Number(porta) || 9100, imprime, colunasImpressao: setor.colunasImpressao })
+      await api.salvarSetor(setor.id, { impressoraHost: host || null, impressoraPorta: Number(porta) || 9100, imprime, colunasImpressao: setor.colunasImpressao, protocolo })
       onMsg({ tipo: 'ok', texto: `${setor.nome}: configuração salva.` })
     } catch (e) { onMsg({ tipo: 'erro', texto: (e as Error).message }) }
     finally { setOcupado(false) }
@@ -91,6 +92,12 @@ function SetorCard({ setor, onMsg }: { setor: Setor; onMsg: (m: { tipo: 'ok' | '
         <input placeholder="IP" value={host} onChange={e => setHost(e.target.value)} disabled={!imprime} />
         <input placeholder="Porta" value={porta} onChange={e => setPorta(e.target.value.replace(/\D/g, ''))} disabled={!imprime} />
       </div>
+      <label title="Se o ticket sair com ! ou VB soltos, a impressora está na outra linguagem">Linguagem
+        <select value={protocolo} onChange={e => setProtocolo(e.target.value as 'ESCPOS' | 'BEMA')} disabled={!imprime}>
+          <option value="ESCPOS">ESC/POS (padrão, G250)</option>
+          <option value="BEMA">Bematech ESC/Bema (MP-4200)</option>
+        </select>
+      </label>
       <div className="acoes">
         <button onClick={salvar} disabled={ocupado}>Salvar</button>
         <button className="sec" onClick={testar} disabled={ocupado || !imprime}>Imprimir teste</button>

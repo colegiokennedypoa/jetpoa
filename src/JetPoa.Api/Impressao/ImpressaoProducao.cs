@@ -6,7 +6,7 @@ namespace JetPoa.Api.Impressao;
 
 /// <summary>
 /// Fila de impressão de produção. Cada linha de ENVIO_PRODUCAO com situação P (pendente)
-/// vira um ticket ESC/POS enviado ao IP do setor. Falhas ficam em E com nova tentativa
+/// vira um ticket (ESC/POS ou ESC/Bema, conforme o setor) enviado ao IP do setor. Falhas ficam em E com nova tentativa
 /// automática (até 5) e podem ser reenviadas pela tela de Produção.
 /// </summary>
 public sealed class ImpressaoProducao(Db db, ILogger<ImpressaoProducao> log) : BackgroundService
@@ -31,6 +31,7 @@ public sealed class ImpressaoProducao(Db db, ILogger<ImpressaoProducao> log) : B
         public string? ImpressoraHost { get; set; }
         public int? ImpressoraPorta { get; set; }
         public int ColunasImpressao { get; set; } = 48;
+        public string Protocolo { get; set; } = EscPos.ProtocoloEscPos;
         public int Numero { get; set; }
         public string? Mesa { get; set; }
         public string? Identificacao { get; set; }
@@ -72,7 +73,7 @@ public sealed class ImpressaoProducao(Db db, ILogger<ImpressaoProducao> log) : B
         // pendentes + erros ainda dentro do limite, com espera crescente entre tentativas (20s * tentativas)
         var pendentes = (await c.QueryAsync<EnvioPendente>("""
             select e.id, e.tipo, e.tentativas, e.envio_origem_id, e.criado_em, e.mesa,
-                   s.nome setor_nome, s.imprime, s.impressora_host, s.impressora_porta, s.colunas_impressao,
+                   s.nome setor_nome, s.imprime, s.impressora_host, s.impressora_porta, s.colunas_impressao, s.protocolo,
                    co.numero, nvl(cl.nome, co.identificacao) identificacao, co.entrada_tipo, a.nome area
               from envio_producao e
               join setor_producao s on s.id = e.setor_producao_id
@@ -141,7 +142,7 @@ public sealed class ImpressaoProducao(Db db, ILogger<ImpressaoProducao> log) : B
 
     private static byte[] MontarTicket(EnvioPendente env, List<ItemTicket> itens, bool removerAcentos)
     {
-        var t = new EscPos(env.ColunasImpressao, removerAcentos);
+        var t = new EscPos(env.ColunasImpressao, removerAcentos, env.Protocolo);
         var titulo = env.Tipo switch { "C" => "*** CANCELAMENTO ***", "R" => "REIMPRESSAO", _ => env.SetorNome.ToUpperInvariant() };
 
         t.Centro().Negrito(true).Tamanho(0x11).Linha(titulo).Tamanho(0x00);
@@ -187,12 +188,16 @@ public sealed class ImpressaoProducao(Db db, ILogger<ImpressaoProducao> log) : B
     }
 
     /// <summary>Ticket de teste para um setor (usado na tela de Produção).</summary>
-    public static byte[] TicketTeste(string setor, int colunas, bool removerAcentos)
+    public static byte[] TicketTeste(string setor, int colunas, bool removerAcentos, string? protocolo = null)
     {
-        var t = new EscPos(colunas, removerAcentos);
+        var t = new EscPos(colunas, removerAcentos, protocolo);
         t.Centro().Negrito(true).Tamanho(0x11).Linha("TESTE").Tamanho(0x00).Linha(setor.ToUpperInvariant()).Negrito(false)
          .Linha($"{DateTime.Now:dd/MM/yyyy HH:mm:ss}").Linha("Acentuação: ÁÉÍÓÚ ãõ ç").Esquerda().Separador()
-         .Linha("JetPOA - novo sistema do bistro").Avancar(4).Cortar();
+         .Linha("JetPOA - novo sistema do bistro")
+         .Linha(t.Bema ? "Comandos: ESC/Bema (Bematech)" : "Comandos: ESC/POS")
+         .Negrito(true).Tamanho(0x11).Linha("LETRA GRANDE").Tamanho(0x00).Negrito(false)
+         .Linha("Se aparecer ! ou VB soltos, troque a linguagem").Linha("da impressora na tela Producao.")
+         .Avancar(4).Cortar();
         return t.ToArray();
     }
 }
