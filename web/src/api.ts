@@ -49,7 +49,7 @@ export type ClienteInput = {
 }
 
 export type Garcom = { id: number; nome: string; ativo: string }
-export type Area = { id: number; codigo: string; nome: string }
+export type Area = { id: number; codigo: string; nome: string; ativo: 'S' | 'N' }
 export type Setor = {
   id: number; codigo: string; nome: string; imprime: string
   impressoraHost: string | null; impressoraPorta: number | null; colunasImpressao: number
@@ -235,7 +235,9 @@ export const api = {
     req<void>(`/api/clientes/${id}`, { method: 'PUT', body: JSON.stringify(c) }),
 
   garcons: () => req<Garcom[]>('/api/garcons'),
-  areas: () => req<Area[]>('/api/areas'),
+  areas: (todas = false) => req<Area[]>(`/api/areas${todas ? '?todas=true' : ''}`),
+  salvarArea: (id: number | null, a: { codigo: string; nome: string; ativo: boolean }) =>
+    req<void>(id ? `/api/areas/${id}` : '/api/areas', { method: id ? 'PUT' : 'POST', body: JSON.stringify(a) }),
   setores: () => req<Setor[]>('/api/setores'),
   produtosVenda: () => req<ProdutoResumo[]>('/api/produtos?somenteVendiveis=true'),
 

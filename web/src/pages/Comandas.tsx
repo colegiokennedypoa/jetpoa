@@ -106,7 +106,7 @@ function AbrirComanda({ onAberta, onCancelar }: { onAberta: (id: number) => void
             <button type="button" className={entrada === 'R' ? 'ativo' : ''} onClick={() => setEntrada('R')}>Rio</button>
           </span>
         </label>
-        <label>Área
+        <label>Área (opcional)
           <select value={areaId ?? ''} onChange={e => setAreaId(e.target.value ? Number(e.target.value) : null)}>
             <option value="">—</option>
             {areas.map(a => <option key={a.id} value={a.id}>{a.codigo} · {a.nome}</option>)}

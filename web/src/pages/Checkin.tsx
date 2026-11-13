@@ -13,7 +13,7 @@ export default function Checkin() {
   const [entrada, setEntrada] = useState<'T' | 'R'>(() => (lerLocal(CHAVE_ENTRADA) === 'R' ? 'R' : 'T'))
   const [evento, setEvento] = useState<Evento | null>(null)
   const [presentes, setPresentes] = useState<{ entrada: string; quantidade: number }[]>([])
-  const [modo, setModo] = useState<'entrada' | 'saida' | 'eventos'>('entrada')
+  const [modo, setModo] = useState<'entrada' | 'saida' | 'eventos' | 'areas'>('entrada')
   const [msg, setMsg] = useState<Msg>()
 
   const atualizar = () => {
@@ -35,6 +35,7 @@ export default function Checkin() {
           <button className={modo === 'entrada' ? 'ativo' : ''} onClick={() => setModo('entrada')}>Entrada</button>
           <button className={modo === 'saida' ? 'ativo' : ''} onClick={() => setModo('saida')}>Saída</button>
           {pode(P.eventoEditar) && <button className={modo === 'eventos' ? 'ativo' : ''} onClick={() => setModo('eventos')}>Eventos</button>}
+          {pode(P.eventoEditar) && <button className={modo === 'areas' ? 'ativo' : ''} onClick={() => setModo('areas')}>Áreas</button>}
         </span>
         <span className="contador">No local hoje: Terra {qtd('T')} · Rio {qtd('R')}</span>
       </div>
@@ -49,6 +50,7 @@ export default function Checkin() {
       {modo === 'entrada' && <Entrada entrada={entrada} onMsg={m => { setMsg(m); atualizar() }} />}
       {modo === 'saida' && <Saida onMsg={m => { setMsg(m); atualizar() }} />}
       {modo === 'eventos' && <Eventos onMudou={atualizar} onMsg={setMsg} />}
+      {modo === 'areas' && <Areas onMsg={setMsg} />}
     </section>
   )
 }
@@ -91,7 +93,7 @@ function Entrada({ entrada, onMsg }: { entrada: 'T' | 'R'; onMsg: (m: Msg) => vo
         <label>Nº da pulseira / comanda*
           <input ref={campoNumero} className="numero-grande" value={numero} onChange={e => setNumero(e.target.value.replace(/\D/g, ''))} inputMode="numeric" required autoFocus />
         </label>
-        <label>Área
+        <label>Área (opcional)
           <select value={areaId ?? ''} onChange={e => setAreaId(Number(e.target.value) || null)}>
             <option value="">—</option>
             {areas.map(a => <option key={a.id} value={a.id}>{a.codigo} · {a.nome}</option>)}
@@ -205,6 +207,58 @@ function Eventos({ onMudou, onMsg }: { onMudou: () => void; onMsg: (m: Msg) => v
             </tr>
           ))}
           {lista.length === 0 && <tr><td colSpan={6} className="vazio">Nenhum evento nos últimos 30 dias.</td></tr>}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+/** Cadastro de áreas (opcional no check-in). Inativar tira a área das listas sem afetar comandas antigas. */
+function Areas({ onMsg }: { onMsg: (m: Msg) => void }) {
+  const [lista, setLista] = useState<Area[]>([])
+  const [edit, setEdit] = useState<{ id: number | null; codigo: string; nome: string; ativo: boolean } | null>(null)
+
+  const carregar = () => api.areas(true).then(setLista).catch(e => onMsg({ tipo: 'erro', texto: e.message }))
+  useEffect(() => { carregar() }, [])   // eslint-disable-line react-hooks/exhaustive-deps
+
+  const salvar = async (id: number | null, a: { codigo: string; nome: string; ativo: boolean }, texto: string) => {
+    try { await api.salvarArea(id, a); onMsg({ tipo: 'ok', texto }); setEdit(null); carregar() }
+    catch (err) { onMsg({ tipo: 'erro', texto: (err as Error).message }) }
+  }
+  const enviar = (e: FormEvent) => {
+    e.preventDefault()
+    if (edit) salvar(edit.id, edit, 'Área salva.')
+  }
+
+  return (
+    <div>
+      <div className="filtros"><button onClick={() => setEdit({ id: null, codigo: '', nome: '', ativo: true })}>+ Nova área</button></div>
+      {edit && (
+        <form className="cartao" onSubmit={enviar}>
+          <div className="grade">
+            <label>Código*<input value={edit.codigo} onChange={e => setEdit({ ...edit, codigo: e.target.value })} maxLength={10} required /></label>
+            <label>Nome*<input value={edit.nome} onChange={e => setEdit({ ...edit, nome: e.target.value })} maxLength={100} required /></label>
+          </div>
+          <label className="check"><input type="checkbox" checked={edit.ativo} onChange={e => setEdit({ ...edit, ativo: e.target.checked })} /> Ativa</label>
+          <div className="acoes"><button type="submit">Salvar</button><button type="button" className="sec" onClick={() => setEdit(null)}>Cancelar</button></div>
+        </form>
+      )}
+      <table>
+        <thead><tr><th>Código</th><th>Nome</th><th>Situação</th><th></th></tr></thead>
+        <tbody>
+          {lista.map(a => (
+            <tr key={a.id} className={a.ativo === 'S' ? '' : 'inativo'}>
+              <td>{a.codigo}</td><td>{a.nome}</td><td>{a.ativo === 'S' ? 'Ativa' : 'Inativa'}</td>
+              <td className="acoes-linha">
+                <button className="sec" onClick={() => setEdit({ id: a.id, codigo: a.codigo, nome: a.nome, ativo: a.ativo === 'S' })}>Editar</button>
+                <button className="sec" onClick={() => salvar(a.id, { codigo: a.codigo, nome: a.nome, ativo: a.ativo !== 'S' },
+                  a.ativo === 'S' ? `Área ${a.codigo} inativada.` : `Área ${a.codigo} reativada.`)}>
+                  {a.ativo === 'S' ? 'Inativar' : 'Reativar'}
+                </button>
+              </td>
+            </tr>
+          ))}
+          {lista.length === 0 && <tr><td colSpan={4} className="vazio">Nenhuma área cadastrada.</td></tr>}
         </tbody>
       </table>
     </div>

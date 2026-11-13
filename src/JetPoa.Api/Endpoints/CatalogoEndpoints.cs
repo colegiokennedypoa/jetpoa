@@ -1,4 +1,6 @@
 using Dapper;
+using JetPoa.Api.Auth;
+using Oracle.ManagedDataAccess.Client;
 using JetPoa.Api.Data;
 
 namespace JetPoa.Api.Endpoints;
@@ -56,7 +58,10 @@ public static class CatalogoEndpoints
         public long Id { get; set; }
         public string Codigo { get; set; } = "";
         public string Nome { get; set; } = "";
+        public string Ativo { get; set; } = "S";
     }
+
+    public sealed record AreaInput(string? Codigo, string? Nome, bool Ativo);
 
     public sealed class Componente
     {
@@ -132,10 +137,39 @@ public static class CatalogoEndpoints
             return await c.QueryAsync<Garcom>("select id, nome, ativo from garcom order by nome");
         });
 
-        g.MapGet("/areas", async (Db db, CancellationToken ct) =>
+        // áreas ativas (check-in, caixa); todas=true traz também as inativas (cadastro)
+        g.MapGet("/areas", async (Db db, bool? todas, CancellationToken ct) =>
         {
             using var c = await db.OpenAsync(ct);
-            return await c.QueryAsync<Area>("select id, codigo, nome from area where ativo = 'S' order by codigo");
+            return await c.QueryAsync<Area>(
+                "select id, codigo, nome, ativo from area where (:todas = 1 or ativo = 'S') order by ativo desc, codigo",
+                new { todas = todas == true ? 1 : 0 });
         });
+
+        var areas = app.MapGroup("/api/areas").WithTags("Catálogo").RequireAuthorization(Permissoes.EventoEditar);
+        areas.MapPost("", async (Db db, AreaInput i, CancellationToken ct) => await SalvarAreaAsync(db, null, i, ct));
+        areas.MapPut("/{id:long}", async (Db db, long id, AreaInput i, CancellationToken ct) => await SalvarAreaAsync(db, id, i, ct));
+    }
+
+    private static async Task<IResult> SalvarAreaAsync(Db db, long? id, AreaInput i, CancellationToken ct)
+    {
+        var codigo = i.Codigo?.Trim().ToUpperInvariant();
+        var nome = i.Nome?.Trim();
+        if (string.IsNullOrEmpty(codigo) || codigo.Length > 10) return Results.UnprocessableEntity(new { erro = "Informe o código da área (até 10 caracteres)." });
+        if (string.IsNullOrEmpty(nome) || nome.Length > 100) return Results.UnprocessableEntity(new { erro = "Informe o nome da área (até 100 caracteres)." });
+        var ativo = i.Ativo ? "S" : "N";
+        using var c = await db.OpenAsync(ct);
+        try
+        {
+            if (id is null)
+                await c.ExecuteAsync("insert into area (codigo, nome, ativo) values (:codigo, :nome, :ativo)", new { codigo, nome, ativo });
+            else if (await c.ExecuteAsync("update area set codigo = :codigo, nome = :nome, ativo = :ativo where id = :id", new { id, codigo, nome, ativo }) == 0)
+                return Results.NotFound(new { erro = "Área não encontrada." });
+        }
+        catch (OracleException e) when (e.Number == 1)
+        {
+            return Results.Conflict(new { erro = $"Já existe uma área com o código {codigo}." });
+        }
+        return Results.NoContent();
     }
 }
