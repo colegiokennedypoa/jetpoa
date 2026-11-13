@@ -256,7 +256,7 @@ end;
 -- ---------------------------------------------------------------------
 insert into setor_producao (codigo, nome, imprime, impressora_host, impressora_porta) values ('COZINHA','Cozinha','S','192.168.101.50',9100);
 insert into setor_producao (codigo, nome, imprime, impressora_host, impressora_porta) values ('BAR','Bar / Balcão','S','192.168.101.55',9100);
-insert into setor_producao (codigo, nome, imprime, impressora_host, impressora_porta) values ('GARCOM','Garçom (retirada direta)','S','192.168.101.60',9100);
+insert into setor_producao (codigo, nome, imprime, impressora_host, impressora_porta) values ('GARCOM','Garçom','S','192.168.101.60',9100);
 insert into setor_producao (codigo, nome, imprime, impressora_host, impressora_porta) values ('NENHUM','Não imprime','N',null,null);
 
 insert into perfil (nome, limite_desconto_pct, autoriza_desconto) values ('Administrador',100,'S');
