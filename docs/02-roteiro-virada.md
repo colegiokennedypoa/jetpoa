@@ -64,18 +64,20 @@ A tela **Implantação** mostra o checklist ao vivo. Este roteiro diz **quando**
 
 ## Plano de volta (rollback)
 Se algo impedir a operação no D0:
-1. **NFC-e**: o sistema novo continua fechando comandas mesmo sem NFC-e. As notas pendentes ficam na tela Fiscal para emitir depois.
-2. **Voltar ao Forms** (último recurso):
+1. **Cobrar com o sistema parado**: abra `C:\Projeto\JetPOA\posicao-comandas\posicao-<data de hoje>.html` no navegador. Ele mostra cada comanda aberta com itens e valor a pagar, no retrato dos últimos 2 minutos antes da parada.
+2. **NFC-e**: o sistema novo continua fechando comandas mesmo sem NFC-e. As notas pendentes ficam na tela Fiscal para emitir depois.
+3. **Voltar ao Forms** (último recurso):
    - parar o serviço: `Stop-Service JetPOABistro`;
    - reativar o job: `exec dbms_job.broken(401, false); commit;`
    - o Forms continua a numeração do maior número da própria tabela. **Antes de voltar**, confira se o sistema novo emitiu notas de produção: elas estão em `BISTRO.NFCE` (série 1, ambiente 1). Se houver, avise o responsável técnico, porque o Forms tentaria reutilizar esses números.
-3. **Voltar versão do sistema novo**: ver o cabeçalho de `scripts\atualizar.ps1`.
+4. **Voltar versão do sistema novo**: ver o cabeçalho de `scripts\atualizar.ps1`.
 
 ## Onde fica cada coisa
 | O quê | Onde |
 |---|---|
 | Código | GitHub `colegiokennedypoa/jetpoa` |
 | Programa instalado | `C:\Projeto\JetPOA\app` (serviço `JetPOABistro`, porta 5080) |
+| Posição das comandas (contingência) | `C:\Projeto\JetPOA\posicao-comandas` (um arquivo por dia) |
 | Configuração e segredos | `C:\Projeto\certificado\52822987000123.conf` (fora do Git) |
 | Certificado A1 | `C:\Projeto\certificado\52822987000123.pfx` |
 | Banco | Oracle XE `192.168.0.109:1521/XE`, esquema `BISTRO` (o Forms continua no `ADMINISTRATIVO`) |

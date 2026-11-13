@@ -31,6 +31,8 @@ builder.Services.Configure<JetPoa.Api.Fiscal.NfceOptions>(builder.Configuration.
 builder.Services.AddSingleton<JetPoa.Api.Fiscal.NfceService>();
 builder.Services.AddHostedService<JetPoa.Api.Fiscal.NfceWorker>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<ImpressaoProducao>());
+// arquivo diário com a posição das comandas (contingência para cobrar se o sistema parar)
+builder.Services.AddHostedService<JetPoa.Api.Impressao.PosicaoComandas>();
 builder.Services.AddMemoryCache();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(o => o.CustomSchemaIds(t => t.FullName!.Replace('+', '.')));

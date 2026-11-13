@@ -387,7 +387,7 @@ public static class FechamentoEndpoints
         return new Contexto(sit, itens, categoria, await TaxaPadraoAsync(c, tx));
     }
 
-    private static async Task<(Impressao.Conferencia.Dados? Dados, string? Erro)> ConferenciaAsync(IDbConnection c, long id)
+    internal static async Task<(Impressao.Conferencia.Dados? Dados, string? Erro)> ConferenciaAsync(IDbConnection c, long id)
     {
         var ctx = await CarregarAsync(c, id, null);
         if (ctx is null) return (null, "Comanda não encontrada.");
